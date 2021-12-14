@@ -574,6 +574,9 @@ module Cardano.Api (
     OperationalCertificate,
     OperationalCertificateIssueCounter,
     OperationalCertIssueError,
+    getHotKey,
+    getKesPeriod,
+    getOpCertCount,
     issueOperationalCertificate,
 
     -- * Genesis file
