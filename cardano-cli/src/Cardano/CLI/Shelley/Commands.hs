@@ -355,6 +355,14 @@ data QueryCmd =
   | QueryProtocolState' AnyConsensusModeParams NetworkId (Maybe OutputFile)
   | QueryStakeSnapshot' AnyConsensusModeParams NetworkId (Hash StakePoolKey)
   | QueryPoolParams' AnyConsensusModeParams NetworkId (Hash StakePoolKey)
+  | QueryKesPeriodInfo
+      AnyConsensusModeParams
+      NetworkId
+      FilePath
+      -- ^ Node operational certificate
+      OpCertCounterFile
+      -- ^ Node operational certificate counter
+      (Maybe OutputFile)
   deriving Show
 
 renderQueryCmd :: QueryCmd -> Text
@@ -371,6 +379,7 @@ renderQueryCmd cmd =
     QueryProtocolState' {} -> "query protocol-state"
     QueryStakeSnapshot' {} -> "query stake-snapshot"
     QueryPoolParams' {} -> "query pool-params"
+    QueryKesPeriodInfo {} -> "query kes-period-info"
 
 data GovernanceCmd
   = GovernanceMIRPayStakeAddressesCertificate
