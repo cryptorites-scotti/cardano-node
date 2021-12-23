@@ -406,10 +406,10 @@ instance FromJSONKey TxIn where
 
 parseTxId :: Parsec.Parser TxId
 parseTxId = do
-  str <- Parsec.many1 Parsec.hexDigit Parsec.<?> "transaction id (hexadecimal)"
-  case deserialiseFromRawBytesHex AsTxId (BSC.pack str) of
-    Just addr -> return addr
-    Nothing -> fail $ "Incorrect transaction id format:: " ++ show str
+  str <- some Parsec.hexDigit <?> "transaction id (hexadecimal)"
+  failEitherWith
+    (\e -> "Incorrect transaction id format: " ++ displayError e) $
+    deserialiseFromRawBytesHex AsTxId $ BSC.pack str
 
 parseTxIn :: Parsec.Parser TxIn
 parseTxIn = TxIn <$> parseTxId <*> (Parsec.char '#' *> parseTxIx)
@@ -1161,10 +1161,9 @@ pattern TxOutDatum s d  <- TxOutDatum' s _ d
 
 parseHash :: SerialiseAsRawBytes (Hash a) => AsType (Hash a) -> Parsec.Parser (Hash a)
 parseHash asType = do
-  str <- Parsec.many1 Parsec.hexDigit Parsec.<?> "hash"
-  case deserialiseFromRawBytesHex asType (BSC.pack str) of
-    Just sdh -> return sdh
-    Nothing  -> fail $ "Failed to parse hash: " ++ show str
+  str <- some Parsec.hexDigit <?> "hash"
+  failEitherWith (\e -> "Failed to parse hash: " ++ displayError e) $
+    deserialiseFromRawBytesHex asType (BSC.pack str)
 
 -- ----------------------------------------------------------------------------
 -- Transaction fees
