@@ -902,12 +902,10 @@ runQueryLeadershipSchedule (AnyConsensusModeParams cModeParams) network
           & hoistMaybe (ShelleyQueryCmdEraConsensusModeMismatch (AnyConsensusMode cMode) anyE)
 
       let pparamsQuery = QueryInEra eInMode $ QueryInShelleyBasedEra sbe QueryProtocolParameters
-          serDebugLedgerStateQuery = QueryInEra eInMode . QueryInShelleyBasedEra sbe $ QueryDebugLedgerState
           ptclStateQuery = QueryInEra eInMode . QueryInShelleyBasedEra sbe $ QueryProtocolState
           eraHistoryQuery = QueryEraHistory CardanoModeIsMultiEra
 
       pparams <- executeQuery era cModeParams localNodeConnInfo pparamsQuery
-      serDebugLedState <- executeQuery era cModeParams localNodeConnInfo serDebugLedgerStateQuery
       ptclState <- executeQuery era cModeParams localNodeConnInfo ptclStateQuery
       eraHistory <- firstExceptT ShelleyQueryCmdAcquireFailure . newExceptT $ queryNodeLocalState localNodeConnInfo Nothing eraHistoryQuery
       let eInfo = toEpochInfo eraHistory
@@ -927,7 +925,6 @@ runQueryLeadershipSchedule (AnyConsensusModeParams cModeParams) network
                      shelleyGenesis
                      eInfo
                      pparams
-                     serDebugLedState
                      ptclState
                      poolid
                      vrkSkey

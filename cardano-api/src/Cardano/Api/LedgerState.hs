@@ -52,6 +52,7 @@ module Cardano.Api.LedgerState
 import           Prelude
 
 import           Control.Exception
+import           Control.Monad (when)
 import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.Except.Extra
@@ -95,9 +96,8 @@ import           Cardano.Api.LedgerEvent (LedgerEvent, toLedgerEvent)
 import           Cardano.Api.Modes (CardanoMode, EpochSlots (..))
 import           Cardano.Api.NetworkId (NetworkId (..), NetworkMagic (NetworkMagic))
 import           Cardano.Api.ProtocolParameters
-import           Cardano.Api.Query (CurrentEpochState (..), DebugLedgerState (..), ProtocolState,
-                   SerialisedCurrentEpochState (..), SerialisedDebugLedgerState,
-                   decodeCurrentEpochState, decodeDebugLedgerState, decodeProtocolState)
+import           Cardano.Api.Query (CurrentEpochState (..), ProtocolState,
+                   SerialisedCurrentEpochState (..), decodeCurrentEpochState, decodeProtocolState)
 import           Cardano.Binary (FromCBOR)
 import qualified Cardano.Chain.Genesis
 import qualified Cardano.Chain.Update
@@ -1264,6 +1264,7 @@ data LeadershipError = LeaderErrDecodeLedgerStateFailure
                          SlotNo
                          -- ^ Predicted last slot of the epoch
                      | LeaderErrSlotRangeCalculationFailure Text
+                     | LeaderErrCandidateNonceStillEvolving
                      deriving Show
 
 instance Error LeadershipError where
@@ -1285,6 +1286,7 @@ instance Error LeadershipError where
     " \nCalculated last slot of current epoch: " <> show predictedLastSlot
   displayError (LeaderErrSlotRangeCalculationFailure e) =
     "Error while calculating the slot range: " <> Text.unpack e
+  displayError LeaderErrCandidateNonceStillEvolving = "Candidate nonce is still evolving"
 
 nextEpochEligibleLeadershipSlots
   :: HasField "_d" (Core.PParams (ShelleyLedgerEra era)) UnitInterval
@@ -1301,12 +1303,22 @@ nextEpochEligibleLeadershipSlots
   -> SigningKey VrfKey
   -- ^ VRF signing key of the stake pool
   -> ProtocolParameters
+  -> EpochInfo (Either Text)
   -> (ChainTip, EpochNo)
   -> Either LeadershipError (Set SlotNo)
 nextEpochEligibleLeadershipSlots sbe sGen serCurrEpochState ptclState
                  poolid@(StakePoolKeyHash poolHash) (VrfSigningKey vrfSkey) pParams
-                 (cTip, currentEpoch) = do
-  -- First we check if we are within 3k/f slots of the end of the current epoch
+                 eInfo (cTip, currentEpoch) = do
+
+  (_, currentEpochLastSlot) <- first LeaderErrSlotRangeCalculationFailure
+                                 $ Slot.epochInfoRange eInfo currentEpoch
+
+  rOfInterest <- first LeaderErrSlotRangeCalculationFailure
+                  $ Slot.epochInfoRange eInfo (currentEpoch + 1)
+
+
+  -- First we check if we are within 3k/f slots of the end of the current epoch.
+  -- Why? Because the stake distribution is stable at this point.
   -- k is the security parameter
   -- f is the active slot coefficient
   let stabilityWindowR :: Rational
@@ -1323,27 +1335,27 @@ nextEpochEligibleLeadershipSlots sbe sGen serCurrEpochState ptclState
       then return ()
       else Left $ LeaderErrStakeDistribUnstable tip stableStakeDistribSlot stabilityWindowSlots currentEpochLastSlot
 
+  -- Let's do a nonce check. The candidate nonce and the evolving nonce should not be equal.
+  chainDepState <- first (const LeaderErrDecodeProtocolStateFailure)
+                     $ decodeProtocolState ptclState
+
+  let ShelleyAPI.PrtclState _ evolvingNonce candidateNonce = TPraos.csProtocol chainDepState
+
+  when (evolvingNonce == candidateNonce)
+   $ Left LeaderErrCandidateNonceStillEvolving
 
   -- Then we get the "mark" snapshot. This snapshot will be used for the next
   -- epoch's leadership schedule.
   CurrentEpochState cEstate <- first (const LeaderErrDecodeProtocolEpochStateFailure)
-               $ obtainDecodeEpochStateConstraints sbe
-               $ decodeCurrentEpochState serCurrEpochState
+                                 $ obtainDecodeEpochStateConstraints sbe
+                                 $ decodeCurrentEpochState serCurrEpochState
+
   let markSnapshotPoolDistr = ShelleyAPI.unPoolDistr . ShelleyAPI.calculatePoolDistr . ShelleyAPI._pstakeMark
                                 $ obtainIsStandardCrypto sbe $ ShelleyAPI.esSnapshots cEstate
 
 
   relativeStake <- maybe (Left $ LeaderErrStakePoolHasNoStake poolid)
                          (Right . ShelleyAPI.individualPoolStake) $ Map.lookup poolHash markSnapshotPoolDistr
-
-
-
-  let isLeader :: Consensus.Nonce -> SlotNo -> Bool
-      isLeader eNonce slotNo = isSlotLeader sbe eNonce nextEpochFirstSlot pParams vrfSkey relativeStake f slotNo
-
-
-  chainDepState <- first (const LeaderErrDecodeProtocolStateFailure)
-                     $ decodeProtocolState ptclState
 
 
   let Tick.TicknState epochNonce _ = TPraos.csTickn chainDepState
