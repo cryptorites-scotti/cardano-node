@@ -75,7 +75,9 @@ propLogs format rootDir localSock = do
                             _ -> false "there is more than one symlink"
                         else false "there is still 1 single log, no rotation"
           -}
-        _ -> false "root dir contains more than one subdir"
+        subDirs -> do
+          traceIO $ "FAILED subDirs: " <> show subDirs
+          false "root dir contains more than one subdir"
     False -> false "root dir doesn't exist"
  where
   config root p = TracerConfig
