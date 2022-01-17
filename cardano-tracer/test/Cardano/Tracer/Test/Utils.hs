@@ -24,7 +24,7 @@ propRunInLogsStructure
 propRunInLogsStructure testAction = ioProperty $ do
   (rootDir, deleteDir) <- newTempDir
   (localSock, _) <- newTempFile
-  let preparedLocalSock = if isWindows then forWindows localSock else localSock
+  let preparedLocalSock = if isWindows then forWindows localSock else "/tmp/cardano-tracer-test.pipe" -- localSock
   testAction rootDir preparedLocalSock
     `finally` (removeFile' preparedLocalSock >> deleteDir)
 
