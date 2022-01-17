@@ -35,7 +35,7 @@ propLogs format rootDir localSock = do
   stopProtocols <- initProtocolsBrake
   dpRequestors <- initDataPointRequestors
   withAsync (doRunCardanoTracer (config rootDir localSock) stopProtocols dpRequestors) . const $
-    withAsync (launchForwardersSimple Responder localSock 1000 10000) . const $ do
+    withAsync (launchForwardersSimple Initiator localSock 1000 10000) . const $ do
       sleep 7.0 -- Wait till some rotation is done.
       applyBrake stopProtocols
       sleep 0.5
@@ -76,7 +76,7 @@ propLogs format rootDir localSock = do
  where
   config root p = TracerConfig
     { networkMagic   = 764824073
-    , network        = ConnectTo $ NE.fromList [LocalSocket p]
+    , network        = AcceptAt (LocalSocket p) -- ConnectTo $ NE.fromList [LocalSocket p]
     , loRequestNum   = Just 1
     , ekgRequestFreq = Just 1.0
     , hasEKG         = Nothing
