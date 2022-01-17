@@ -1,3 +1,5 @@
+{-# LANGUAGE MultiWayIf #-}
+
 module Cardano.Tracer.Test.Utils
   ( doesDirectoryEmpty
   , false
@@ -12,7 +14,7 @@ import           System.Directory.Extra (doesFileExist, listDirectories,
                    removeFile, removePathForcibly)
 import           System.FilePath (dropDrive)
 import           System.IO.Extra (newTempDir, newTempFile)
-import           System.Info.Extra (isWindows)
+import           System.Info.Extra (isMac, isWindows)
 import           Test.Tasty.QuickCheck
 
 false :: String -> IO Property
@@ -24,7 +26,7 @@ propRunInLogsStructure
 propRunInLogsStructure testAction = ioProperty $ do
   (rootDir, deleteDir) <- newTempDir
   (localSock, _) <- newTempFile
-  let preparedLocalSock = if isWindows then forWindows localSock else "/tmp/cardano-tracer-test.pipe" -- localSock
+  let preparedLocalSock = prepareLocalSock localSock
   testAction rootDir preparedLocalSock
     `finally` (removeFile' preparedLocalSock >> deleteDir)
 
@@ -35,15 +37,21 @@ propRunInLogsStructure2 testAction = ioProperty $ do
   (rootDir, deleteDir) <- newTempDir
   (localSock1, _) <- newTempFile
   (localSock2, _) <- newTempFile
-  let preparedLocalSock1 = if isWindows then forWindows localSock1 else localSock1
-      preparedLocalSock2 = if isWindows then forWindows localSock2 else localSock2
+  let preparedLocalSock1 = prepareLocalSock localSock1
+      preparedLocalSock2 = prepareLocalSock localSock2
   testAction rootDir preparedLocalSock1 preparedLocalSock2
     `finally` (   removeFile' preparedLocalSock1
                >> removeFile' preparedLocalSock2
                >> deleteDir)
 
-forWindows :: FilePath -> FilePath
-forWindows localSock = "\\\\.\\pipe\\" <> dropDrive localSock
+prepareLocalSock :: FilePath -> FilePath
+prepareLocalSock localSock =
+  if isWindows
+    then pipeForWindows
+    else if isMac then sockForMac else localSock
+ where
+  pipeForWindows = "\\\\.\\pipe\\" <> dropDrive localSock
+  sockForMac = "/tmp/cardano-tracer-test"
 
 removeDirectoryContent :: FilePath -> IO ()
 removeDirectoryContent dir = listDirectories dir >>= mapM_ removePathForcibly
