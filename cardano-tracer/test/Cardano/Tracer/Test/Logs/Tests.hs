@@ -14,6 +14,8 @@ import           System.Directory
 --import           System.FilePath
 import           System.Time.Extra
 
+import Debug.Trace
+
 import           Cardano.Tracer.Configuration
 --import           Cardano.Tracer.Handlers.Logs.Utils (isItLog, isItSymLink)
 import           Cardano.Tracer.Run (doRunCardanoTracer)
@@ -32,6 +34,8 @@ tests = localOption (QuickCheckTests 1) $ testGroup "Test.Logs"
 
 propLogs :: LogFormat -> FilePath -> FilePath -> IO Property
 propLogs format rootDir localSock = do
+  traceIO $ "rootDir: " <> rootDir
+  traceIO $ "localSock: " <> localSock
   stopProtocols <- initProtocolsBrake
   dpRequestors <- initDataPointRequestors
   withAsync (doRunCardanoTracer (config rootDir localSock) stopProtocols dpRequestors) . const $
