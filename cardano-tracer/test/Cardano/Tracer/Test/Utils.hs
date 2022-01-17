@@ -1,5 +1,3 @@
-{-# LANGUAGE MultiWayIf #-}
-
 module Cardano.Tracer.Test.Utils
   ( doesDirectoryEmpty
   , false
@@ -48,10 +46,12 @@ prepareLocalSock :: FilePath -> FilePath
 prepareLocalSock localSock =
   if isWindows
     then pipeForWindows
-    else if isMac then sockForMac else localSock
+    else if isMac
+           then sockForMac
+           else localSock
  where
   pipeForWindows = "\\\\.\\pipe\\" <> dropDrive localSock
-  sockForMac = "/tmp/cardano-tracer-test"
+  sockForMac = "/tmp/cardano-tracer-test.pipe"
 
 removeDirectoryContent :: FilePath -> IO ()
 removeDirectoryContent dir = listDirectories dir >>= mapM_ removePathForcibly

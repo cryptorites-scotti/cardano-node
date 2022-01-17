@@ -27,7 +27,7 @@ import           Cardano.Tracer.Test.Utils
 tests :: TestTree
 tests = localOption (QuickCheckTests 1) $ testGroup "Test.Logs"
   [ testProperty ".log"             $ propRunInLogsStructure  (propLogs ForHuman)
-  --, testProperty ".json"            $ propRunInLogsStructure  (propLogs ForMachine)
+  , testProperty ".json"            $ propRunInLogsStructure  (propLogs ForMachine)
   --, testProperty "multi, initiator" $ propRunInLogsStructure2 (propMultiInit ForMachine)
   --, testProperty "multi, responder" $ propRunInLogsStructure  (propMultiResp ForMachine)
   ]
