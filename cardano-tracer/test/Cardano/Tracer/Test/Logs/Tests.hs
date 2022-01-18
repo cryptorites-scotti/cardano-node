@@ -5,19 +5,19 @@ module Cardano.Tracer.Test.Logs.Tests
   ) where
 
 import           Control.Concurrent.Async (withAsync)
---import           Control.Monad (filterM)
--- import           Data.List.Extra (notNull)
+import           Control.Monad (filterM)
+--import           Data.List.Extra (notNull)
 import qualified Data.List.NonEmpty as NE
 import           Test.Tasty
 import           Test.Tasty.QuickCheck
 import           System.Directory
---import           System.FilePath
+import           System.FilePath
 import           System.Time.Extra
 
 import Debug.Trace
 
 import           Cardano.Tracer.Configuration
---import           Cardano.Tracer.Handlers.Logs.Utils (isItLog, isItSymLink)
+import           Cardano.Tracer.Handlers.Logs.Utils (isItLog, isItSymLink)
 import           Cardano.Tracer.Run (doRunCardanoTracer)
 import           Cardano.Tracer.Utils (applyBrake, initProtocolsBrake, initDataPointRequestors)
 
@@ -48,9 +48,8 @@ propLogs format rootDir localSock = do
     True ->
       -- ... and contains one node's subdir...
       listDirectory rootDir >>= \case
-        []  -> false "root dir is empty"
-        [_subDir] -> return $ property True
-          {-
+        [] -> false "root dir is empty"
+        (subDir:_) ->
           withCurrentDirectory rootDir $
             -- ... with *.log-files inside...
             listDirectory subDir >>= \case
@@ -74,10 +73,6 @@ propLogs format rootDir localSock = do
                               return $ latestLog === takeFileName maybeLatestLog
                             _ -> false "there is more than one symlink"
                         else false "there is still 1 single log, no rotation"
-          -}
-        subDirs -> do
-          traceIO $ "FAILED subDirs: " <> show subDirs
-          false "root dir contains more than one subdir"
     False -> false "root dir doesn't exist"
  where
   config root p = TracerConfig
