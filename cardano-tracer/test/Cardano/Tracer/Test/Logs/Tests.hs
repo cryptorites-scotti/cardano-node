@@ -6,7 +6,6 @@ module Cardano.Tracer.Test.Logs.Tests
   ) where
 
 import           Control.Concurrent.Async (withAsync)
-import           Control.Monad (filterM)
 --import           Data.List.Extra (notNull)
 import qualified Data.List.NonEmpty as NE
 import           Test.Tasty
@@ -18,7 +17,7 @@ import           System.Time.Extra
 import Debug.Trace
 
 import           Cardano.Tracer.Configuration
-import           Cardano.Tracer.Handlers.Logs.Utils (isItLog, isItSymLink)
+import           Cardano.Tracer.Handlers.Logs.Utils (isItLog, symLinkName)
 import           Cardano.Tracer.Run (doRunCardanoTracer)
 import           Cardano.Tracer.Utils (applyBrake, initProtocolsBrake, initDataPointRequestors)
 
@@ -68,18 +67,19 @@ propLogs format rootDir localSock = do
                   false "subdir doesn't contain expected logs"
                 logsWeNeed ->
                   if length logsWeNeed > 1
-                    then
+                    then do
                       -- ... and one symlink...
-                      filterM (isItSymLink format) logsAndSymLink >>= \case
-                        [] -> false "subdir doesn't contain a symlink"
-                        [symLink] -> do
+                      let pathToSymLink = pathToSubDir </> symLinkName format
+                      symLinkIsHere <- doesFileExist pathToSymLink
+                      if symLinkIsHere
+                        then do
                           -- ... to the latest *.log-file.
-                          maybeLatestLog <- getSymbolicLinkTarget symLink
+                          maybeLatestLog <- getSymbolicLinkTarget pathToSymLink
                           -- The logs' names contain timestamps, so the
                           -- latest log is the maximum one.
                           let latestLog = maximum logsWeNeed
                           return $ latestLog === takeFileName maybeLatestLog
-                        _ -> false "there is more than one symlink"
+                        else false "subdir doesn't contain a symlink"
                     else false "there is still 1 single log, no rotation"
     False -> false "root dir doesn't exist"
  where
