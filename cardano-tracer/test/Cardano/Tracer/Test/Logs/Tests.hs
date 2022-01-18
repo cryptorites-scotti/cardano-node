@@ -1,7 +1,8 @@
 {-# LANGUAGE LambdaCase #-}
 
 module Cardano.Tracer.Test.Logs.Tests
-  ( tests
+  ( testsLogs
+  , testsJson
   ) where
 
 import           Control.Concurrent.Async (withAsync)
@@ -24,28 +25,22 @@ import           Cardano.Tracer.Utils (applyBrake, initProtocolsBrake, initDataP
 import           Cardano.Tracer.Test.Forwarder
 import           Cardano.Tracer.Test.Utils
 
-tests :: TestTree
-tests = localOption (QuickCheckTests 1) $ testGroup "Test.Logs"
-  [ tests1 -- testProperty ".log"             $ propRunInLogsStructure  (propLogs ForHuman)
-  , tests2 -- testProperty ".json"            $ propRunInLogsStructure  (propLogs ForMachine)
+testsLogs :: TestTree
+testsLogs = localOption (QuickCheckTests 1) $ testGroup "Test.Logs"
+  [ testProperty ".log" $ propRunInLogsStructure  (propLogs ForHuman)
+  ]
+
+testsJson :: TestTree
+testsJson = localOption (QuickCheckTests 1) $ testGroup "Test.Logs"
+  [ testProperty ".json" $ propRunInLogsStructure  (propLogs ForMachine)
   --, testProperty "multi, initiator" $ propRunInLogsStructure2 (propMultiInit ForMachine)
   --, testProperty "multi, responder" $ propRunInLogsStructure  (propMultiResp ForMachine)
   ]
 
-tests1 :: TestTree
-tests1 = localOption (QuickCheckTests 1) $ testGroup "Test.Logs.Log"
-  [ testProperty ".log" $ propRunInLogsStructure  (propLogs ForHuman)
-  ]
-
-tests2 :: TestTree
-tests2 = localOption (QuickCheckTests 1) $ testGroup "Test.Logs.Json"
-  [ testProperty ".json" $ propRunInLogsStructure  (propLogs ForMachine)
-  ]
-
 propLogs :: LogFormat -> FilePath -> FilePath -> IO Property
 propLogs format rootDir localSock = do
-  traceIO $ "rootDir: " <> rootDir
-  traceIO $ "localSock: " <> localSock
+  removeDirectoryContent rootDir
+
   stopProtocols <- initProtocolsBrake
   dpRequestors <- initDataPointRequestors
   withAsync (doRunCardanoTracer (config rootDir localSock) stopProtocols dpRequestors) . const $
@@ -55,19 +50,26 @@ propLogs format rootDir localSock = do
       sleep 0.5
 
   doesDirectoryExist rootDir >>= \case
-    True ->
+    True -> do
+      traceIO "Logs, 1__"
       -- ... and contains one node's subdir...
       listDirectory rootDir >>= \case
         [] -> false "root dir is empty"
-        (subDir:_) ->
-          withCurrentDirectory rootDir $
+        (subDir:_) -> do
+          traceIO "Logs, 2__"
+          withCurrentDirectory rootDir $ do
+            traceIO $ "Logs, 3__. rootDir " <> rootDir
             -- ... with *.log-files inside...
             listDirectory subDir >>= \case
               [] -> false "subdir is empty"
-              logsAndSymLink ->
-                withCurrentDirectory subDir $
+              logsAndSymLink -> do
+                traceIO $ "Logs, 3__. subDir " <> subDir
+                withCurrentDirectory subDir $ do
+                  traceIO $ "Logs, 4__"
                   case filter (isItLog format) logsAndSymLink of
-                    [] -> false "subdir doesn't contain expected logs"
+                    [] -> do
+                      traceIO $ "Logs, 5__, logsAndSymLink " <> show logsAndSymLink
+                      false "subdir doesn't contain expected logs"
                     logsWeNeed ->
                       if length logsWeNeed > 1
                         then

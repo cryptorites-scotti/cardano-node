@@ -23,7 +23,6 @@ propRunInLogsStructure
   -> Property
 propRunInLogsStructure testAction = ioProperty $ do
   (rootDir, deleteDir) <- newTempDir
-  removeDirectoryContent rootDir
   (localSock, _) <- newTempFile
   let preparedLocalSock = prepareLocalSock localSock
   testAction rootDir preparedLocalSock
