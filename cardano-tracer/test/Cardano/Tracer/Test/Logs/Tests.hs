@@ -40,6 +40,8 @@ propLogs :: LogFormat -> FilePath -> FilePath -> IO Property
 propLogs format rootDir localSock = do
   removeDirectoryContent rootDir
 
+  traceIO $ "Logs, 0__, localSock: " <> localSock
+
   stopProtocols <- initProtocolsBrake
   dpRequestors <- initDataPointRequestors
   withAsync (doRunCardanoTracer (config rootDir localSock) stopProtocols dpRequestors) . const $
@@ -50,7 +52,7 @@ propLogs format rootDir localSock = do
 
   doesDirectoryExist rootDir >>= \case
     True -> do
-      traceIO $ "Logs, 1__, rootDir" <> rootDir
+      traceIO $ "Logs, 1__, rootDir " <> rootDir
       -- ... and contains one node's subdir...
       listDirectory rootDir >>= \case
         [] -> false "root dir is empty"
