@@ -26,10 +26,20 @@ import           Cardano.Tracer.Test.Utils
 
 tests :: TestTree
 tests = localOption (QuickCheckTests 1) $ testGroup "Test.Logs"
-  [ testProperty ".log"             $ propRunInLogsStructure  (propLogs ForHuman)
-  , testProperty ".json"            $ propRunInLogsStructure  (propLogs ForMachine)
+  [ tests1 -- testProperty ".log"             $ propRunInLogsStructure  (propLogs ForHuman)
+  , tests2 -- testProperty ".json"            $ propRunInLogsStructure  (propLogs ForMachine)
   --, testProperty "multi, initiator" $ propRunInLogsStructure2 (propMultiInit ForMachine)
   --, testProperty "multi, responder" $ propRunInLogsStructure  (propMultiResp ForMachine)
+  ]
+
+tests1 :: TestTree
+tests1 = localOption (QuickCheckTests 1) $ testGroup "Test.Logs.Log"
+  [ testProperty ".log" $ propRunInLogsStructure  (propLogs ForHuman)
+  ]
+
+tests2 :: TestTree
+tests2 = localOption (QuickCheckTests 1) $ testGroup "Test.Logs.Json"
+  [ testProperty ".json" $ propRunInLogsStructure  (propLogs ForMachine)
   ]
 
 propLogs :: LogFormat -> FilePath -> FilePath -> IO Property
