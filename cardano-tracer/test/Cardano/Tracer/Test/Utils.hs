@@ -43,12 +43,10 @@ propRunInLogsStructure2 testAction = ioProperty $ do
                >> deleteDir)
 
 prepareLocalSock :: FilePath -> FilePath
-prepareLocalSock localSock =
-  if isWindows
-    then pipeForWindows
-    else if isMac
-           then sockForMac
-           else localSock
+prepareLocalSock localSock
+  | isWindows = pipeForWindows
+  | isMac     = sockForMac
+  | otherwise = localSock
  where
   pipeForWindows = "\\\\.\\pipe\\" <> dropDrive localSock
   sockForMac = "/tmp/cardano-tracer-test.pipe"
