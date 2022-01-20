@@ -110,7 +110,7 @@ checkIfCurrentLogIsFull
   -> Word64
   -> IO ()
 checkIfCurrentLogIsFull currentLogLock pathToCurrentLog format maxSizeInBytes = do
-  traceIO "ROTATOR, checkIfCurrentLogIsFull"
+  traceIO $ "ROTATOR, checkIfCurrentLogIsFull, path: " <> pathToCurrentLog
   whenM logIsFull $ do
     traceIO "ROTATOR, checkIfCurrentLogIsFull YES"
     createLogAndUpdateSymLink currentLogLock (takeDirectory pathToCurrentLog) format
