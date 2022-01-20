@@ -20,6 +20,8 @@ import           System.Directory.Extra (listDirectories, listFiles)
 import           System.FilePath ((</>), takeDirectory)
 import           System.Time.Extra (sleep)
 
+import Debug.Trace
+
 import           Cardano.Tracer.Configuration
 import           Cardano.Tracer.Handlers.Logs.Utils (createLogAndUpdateSymLink,
                    getTimeStampFromLog, isItLog)
@@ -61,7 +63,8 @@ checkRootDir
   -> RotationParams
   -> LoggingParams
   -> IO ()
-checkRootDir currentLogLock rotParams LoggingParams{logRoot, logFormat} =
+checkRootDir currentLogLock rotParams LoggingParams{logRoot, logFormat} = do
+  traceIO "ROTATOR, checkRootDir"
   whenM (doesDirectoryExist logRoot) $
     listDirectories logRoot >>= \case
       [] ->
@@ -70,6 +73,7 @@ checkRootDir currentLogLock rotParams LoggingParams{logRoot, logFormat} =
         return ()
       logsSubDirs -> do
         let fullPathsToSubDirs = map (logRoot </>) logsSubDirs
+        traceIO $ "ROTATOR, checkRootDir, fullPathsToSubDirs " <> show fullPathsToSubDirs
         forConcurrently_ fullPathsToSubDirs $
           checkLogs currentLogLock rotParams logFormat
 
@@ -84,7 +88,9 @@ checkLogs
   -> IO ()
 checkLogs currentLogLock
           RotationParams{rpLogLimitBytes, rpMaxAgeHours, rpKeepFilesNum} format subDirForLogs = do
+  traceIO $ "ROTATOR, checkLogs..."
   logs <- map (subDirForLogs </>) . filter (isItLog format) <$> listFiles subDirForLogs
+  traceIO $ "ROTATOR, checkLogs, logs " <> show logs
   unless (null logs) $ do
     -- Since logs' names contain timestamps, we can sort them: the maximum one is the latest log,
     -- and this is the current log (i.e. the log we're writing 'TraceObject's in).
@@ -103,8 +109,10 @@ checkIfCurrentLogIsFull
   -> LogFormat
   -> Word64
   -> IO ()
-checkIfCurrentLogIsFull currentLogLock pathToCurrentLog format maxSizeInBytes =
-  whenM logIsFull $
+checkIfCurrentLogIsFull currentLogLock pathToCurrentLog format maxSizeInBytes = do
+  traceIO "ROTATOR, checkIfCurrentLogIsFull"
+  whenM logIsFull $ do
+    traceIO "ROTATOR, checkIfCurrentLogIsFull YES"
     createLogAndUpdateSymLink currentLogLock (takeDirectory pathToCurrentLog) format
  where
   logIsFull = do
