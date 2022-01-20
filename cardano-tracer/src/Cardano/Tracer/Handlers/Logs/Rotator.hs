@@ -117,7 +117,11 @@ checkIfCurrentLogIsFull currentLogLock pathToCurrentLog format maxSizeInBytes = 
  where
   logIsFull = do
     size <- getFileSize pathToCurrentLog
-    return $ fromIntegral size >= maxSizeInBytes
+    traceIO $ "ROTATOR, logIsFull, size: " <> show size
+    traceIO $ "ROTATOR, maxSizeInBytes: " <> show maxSizeInBytes
+    let b = fromIntegral size >= maxSizeInBytes
+    traceIO $ "ROTATOR, b: " <> show b
+    return b -- $ fromIntegral size >= maxSizeInBytes
 
 -- | If there are too old log files - they will be removed.
 --   Please note that some number of log files can be kept in any case.
