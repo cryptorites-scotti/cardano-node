@@ -67,22 +67,21 @@ propLogs format rootDir localSock = do
                 [] -> do
                   traceIO $ "Logs, 5__, logsAndSymLink " <> show logsAndSymLink
                   false "subdir doesn't contain expected logs"
-                logsWeNeed ->
-                  if length logsWeNeed > 1
+                [_singleLog] ->
+                  false "there is still 1 single log, no rotation"
+                logsWeNeed -> do
+                  -- ... and one symlink...
+                  let pathToSymLink = pathToSubDir </> symLinkName format
+                  symLinkIsHere <- doesFileExist pathToSymLink
+                  if symLinkIsHere
                     then do
-                      -- ... and one symlink...
-                      let pathToSymLink = pathToSubDir </> symLinkName format
-                      symLinkIsHere <- doesFileExist pathToSymLink
-                      if symLinkIsHere
-                        then do
-                          -- ... to the latest *.log-file.
-                          maybeLatestLog <- getSymbolicLinkTarget pathToSymLink
-                          -- The logs' names contain timestamps, so the
-                          -- latest log is the maximum one.
-                          let latestLog = maximum logsWeNeed
-                          return $ latestLog === takeFileName maybeLatestLog
-                        else false "subdir doesn't contain a symlink"
-                    else false "there is still 1 single log, no rotation"
+                      -- ... to the latest *.log-file.
+                      maybeLatestLog <- getSymbolicLinkTarget pathToSymLink
+                      -- The logs' names contain timestamps, so the
+                      -- latest log is the maximum one.
+                      let latestLog = maximum logsWeNeed
+                      return $ latestLog === takeFileName maybeLatestLog
+                    else false "subdir doesn't contain a symlink"
     False -> false "root dir doesn't exist"
  where
   config root p = TracerConfig
@@ -94,7 +93,7 @@ propLogs format rootDir localSock = do
     , hasPrometheus  = Nothing
     , logging        = NE.fromList [LoggingParams root FileMode format]
     , rotation       = Just $ RotationParams
-                         { rpFrequencySecs = 5
+                         { rpFrequencySecs = 3
                          , rpLogLimitBytes = 100
                          , rpMaxAgeHours   = 1
                          , rpKeepFilesNum  = 10
