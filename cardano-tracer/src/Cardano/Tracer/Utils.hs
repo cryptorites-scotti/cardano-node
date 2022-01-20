@@ -94,8 +94,9 @@ connIdToNodeId ConnectionId{remoteAddress} = NodeId preparedAddress
     . replace "\"" "-"
     . replace "/" "-"
     . replace "\\" "-"
+    . replace "pipe" "" -- For Windows.
+    . replace "." "" -- For Windows.
     . replace "LocalAddress" "" -- There are only local addresses by design.
-    . replace "\\\\.\\pipe\\" "" -- For Windows.
     $ show remoteAddress
 
 initConnectedNodes :: IO ConnectedNodes
