@@ -235,11 +235,11 @@ doListenToAcceptor snocket address timeLimits (ekgConfig, tfConfig, dpfConfig) =
 traceObjectsWriter :: ForwardSink TraceObject -> IO ()
 traceObjectsWriter sink = forever $ do
   writeToSink sink . mkTraceObject =<< getCurrentTime
-  threadDelay 50000
+  threadDelay 40000
  where
   mkTraceObject now = TraceObject
-    { toHuman     = Just "Human Message"
-    , toMachine   = Just "{\"msg\": \"forMachine\"}"
+    { toHuman     = Just "Human Message for testing if our mechanism works as we expect"
+    , toMachine   = Just "{\"msg\": \"Very big message forMachine because we have to check if it works\"}"
     , toNamespace = ["demoNamespace"]
     , toSeverity  = Info
     , toDetails   = DNormal

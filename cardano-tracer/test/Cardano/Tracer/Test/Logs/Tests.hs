@@ -62,7 +62,8 @@ propLogs format rootDir localSock = do
           traceIO $ "Logs, 3__. pathToSubDir " <> pathToSubDir
           listDirectory pathToSubDir >>= \case
             [] -> false "subdir is empty"
-            logsAndSymLink ->
+            logsAndSymLink -> do
+              traceIO $ "Logs, 4__, logsAndSymLink " <> show logsAndSymLink
               case filter (isItLog format) logsAndSymLink of
                 [] -> do
                   traceIO $ "Logs, 5__, logsAndSymLink " <> show logsAndSymLink
