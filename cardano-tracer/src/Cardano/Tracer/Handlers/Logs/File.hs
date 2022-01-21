@@ -25,7 +25,7 @@ import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TLE
 import           Data.Time.Clock (UTCTime)
 import           Data.Time.Format (defaultTimeLocale, formatTime)
-import           System.Directory (doesFileExist, createDirectoryIfMissing, removeFile)
+import           System.Directory
 import           System.FilePath ((</>))
 
 import Debug.Trace
@@ -59,8 +59,14 @@ writeTraceObjectsToFile nodeId currentLogLock rootDir ForHuman traceObjects = do
     let preparedLine = TE.encodeUtf8 $ T.concat itemsToWrite
     traceIO $ "writeTraceObjectsToFile, HUMAN, preparedLine: " <> show preparedLine
     withLock currentLogLock $ do
+      targetLog <- getSymbolicLinkTarget pathToCurrentLog
+      traceIO $ "writeTraceObjectsToFile, HUMAN, target: " <> targetLog
       traceIO "writeTraceObjectsToFile, HUMAN, append!"
       BS.appendFile pathToCurrentLog preparedLine
+      sz1 <- getFileSize pathToCurrentLog
+      sz2 <- getFileSize targetLog
+      traceIO $ "writeTraceObjectsToFile, HUMAN, symlink sz: " <> show sz1
+      traceIO $ "writeTraceObjectsToFile, HUMAN, target sz: " <> show sz2
 
 writeTraceObjectsToFile nodeId currentLogLock rootDir ForMachine traceObjects = do
   let itemsToWrite = mapMaybe traceObjectToJSON traceObjects
