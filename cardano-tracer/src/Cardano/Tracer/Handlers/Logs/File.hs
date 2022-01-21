@@ -28,6 +28,8 @@ import           Data.Time.Format (defaultTimeLocale, formatTime)
 import           System.Directory (doesFileExist, createDirectoryIfMissing, removeFile)
 import           System.FilePath ((</>))
 
+import Debug.Trace
+
 import           Cardano.Logging (Namespace, TraceObject (..))
 
 import           Cardano.Tracer.Configuration (LogFormat (..))
@@ -51,17 +53,25 @@ writeTraceObjectsToFile
 writeTraceObjectsToFile nodeId currentLogLock rootDir ForHuman traceObjects = do
   let itemsToWrite = mapMaybe traceObjectToText traceObjects
   unless (null itemsToWrite) $ do
+    traceIO "writeTraceObjectsToFile, HUMAN"
     pathToCurrentLog <- prepareLogsStructure nodeId rootDir ForHuman
+    traceIO $ "writeTraceObjectsToFile, HUMAN, path: " <> pathToCurrentLog
     let preparedLine = TE.encodeUtf8 $ T.concat itemsToWrite
-    withLock currentLogLock $
+    traceIO $ "writeTraceObjectsToFile, HUMAN, preparedLine: " <> show preparedLine
+    withLock currentLogLock $ do
+      traceIO "writeTraceObjectsToFile, HUMAN, append!"
       BS.appendFile pathToCurrentLog preparedLine
 
 writeTraceObjectsToFile nodeId currentLogLock rootDir ForMachine traceObjects = do
   let itemsToWrite = mapMaybe traceObjectToJSON traceObjects
   unless (null itemsToWrite) $ do
+    traceIO "writeTraceObjectsToFile, MACHINE"
     pathToCurrentLog <- prepareLogsStructure nodeId rootDir ForMachine
+    traceIO $ "writeTraceObjectsToFile, MACHINE, path: " <> pathToCurrentLog
     let preparedLine = TLE.encodeUtf8 $ TL.concat itemsToWrite
-    withLock currentLogLock $
+    traceIO $ "writeTraceObjectsToFile, MACHINE, preparedLine: " <> show preparedLine
+    withLock currentLogLock $ do
+      traceIO "writeTraceObjectsToFile, MACHINE, append!"
       LBS.appendFile pathToCurrentLog preparedLine
 
 -- | Prepare the structure for the log files:
