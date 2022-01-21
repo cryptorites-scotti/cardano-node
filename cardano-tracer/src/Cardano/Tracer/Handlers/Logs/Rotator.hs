@@ -63,8 +63,7 @@ checkRootDir
   -> RotationParams
   -> LoggingParams
   -> IO ()
-checkRootDir currentLogLock rotParams LoggingParams{logRoot, logFormat} = do
-  traceIO "ROTATOR, checkRootDir"
+checkRootDir currentLogLock rotParams LoggingParams{logRoot, logFormat} =
   whenM (doesDirectoryExist logRoot) $
     listDirectories logRoot >>= \case
       [] ->
@@ -73,7 +72,6 @@ checkRootDir currentLogLock rotParams LoggingParams{logRoot, logFormat} = do
         return ()
       logsSubDirs -> do
         let fullPathsToSubDirs = map (logRoot </>) logsSubDirs
-        traceIO $ "ROTATOR, checkRootDir, fullPathsToSubDirs " <> show fullPathsToSubDirs
         forConcurrently_ fullPathsToSubDirs $
           checkLogs currentLogLock rotParams logFormat
 
@@ -88,7 +86,6 @@ checkLogs
   -> IO ()
 checkLogs currentLogLock
           RotationParams{rpLogLimitBytes, rpMaxAgeHours, rpKeepFilesNum} format subDirForLogs = do
-  traceIO $ "ROTATOR, checkLogs..."
   logs <- map (subDirForLogs </>) . filter (isItLog format) <$> listFiles subDirForLogs
   traceIO $ "ROTATOR, checkLogs, logs " <> show logs
   unless (null logs) $ do
@@ -109,8 +106,7 @@ checkIfCurrentLogIsFull
   -> LogFormat
   -> Word64
   -> IO ()
-checkIfCurrentLogIsFull currentLogLock pathToCurrentLog format maxSizeInBytes = do
-  traceIO $ "ROTATOR, checkIfCurrentLogIsFull, path: " <> pathToCurrentLog
+checkIfCurrentLogIsFull currentLogLock pathToCurrentLog format maxSizeInBytes =
   whenM logIsFull $ do
     traceIO "ROTATOR, checkIfCurrentLogIsFull YES"
     createLogAndUpdateSymLink currentLogLock (takeDirectory pathToCurrentLog) format
