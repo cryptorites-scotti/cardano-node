@@ -117,6 +117,10 @@ checkIfCurrentLogIsFull currentLogLock pathToCurrentLog format maxSizeInBytes = 
  where
   logIsFull = do
     size <- getFileSize pathToCurrentLog
+    fcontent <- readFile pathToCurrentLog
+    traceIO "ROTATOR, ************************"
+    traceIO $ "ROTATOR, file: " <> fcontent
+    traceIO "ROTATOR, ************************"
     traceIO $ "ROTATOR, logIsFull, size: " <> show size
     traceIO $ "ROTATOR, maxSizeInBytes: " <> show maxSizeInBytes
     let b = fromIntegral size >= maxSizeInBytes
