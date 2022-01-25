@@ -7,39 +7,27 @@ module Cardano.Chairman.Commands.Run
   ( cmdRun
   ) where
 
-import           Cardano.Api
-import           Cardano.Api.Protocol.Byron
-import           Cardano.Api.Protocol.Cardano
-import           Cardano.Api.Protocol.Shelley
-import           Cardano.Chairman (chairmanTest)
-import           Cardano.Node.Configuration.POM (parseNodeConfigurationFP, pncProtocol)
-import           Cardano.Node.Protocol.Types (Protocol (..))
-import           Cardano.Node.Configuration.NodeAddress
-import           Cardano.Node.Types
 import           Cardano.Prelude hiding (option)
+
 import           Control.Monad.Class.MonadTime (DiffTime)
 import           Control.Tracer (Tracer (..), stdoutTracer)
-import           Options.Applicative
-import           Ouroboros.Consensus.Config.SecurityParam (SecurityParam (..))
-
+import qualified Data.Text as Text
 import qualified Data.Time.Clock as DTC
+import           Options.Applicative
 import qualified Options.Applicative as Opt
 import qualified System.IO as IO
 
---TODO: replace this with the new stuff from Cardano.Api.Protocol
-mkNodeClientProtocol :: Protocol -> SomeNodeClientProtocol
-mkNodeClientProtocol protocol =
-  case protocol of
-    ByronProtocol ->
-      mkSomeNodeClientProtocolByron
-        (EpochSlots 21600)
+import           Cardano.Node.Configuration.NodeAddress
+import           Cardano.Node.Configuration.POM (makeNodeConfiguration, parseNodeConfigurationFP,
+                   pncProtocol)
+import           Cardano.Node.Protocol.Types (Protocol (..))
+import           Cardano.Node.Types
+import           Ouroboros.Consensus.Config.SecurityParam (SecurityParam (..))
 
-    ShelleyProtocol ->
-      mkSomeNodeClientProtocolShelley
-
-    CardanoProtocol ->
-      mkSomeNodeClientProtocolCardano
-        (EpochSlots 21600)
+import           Cardano.Api
+import           Cardano.Api.Protocol.Cardano
+import           Cardano.Api.Protocol.Shelley
+import           Cardano.Chairman (chairmanTest)
 
 data RunOpts = RunOpts
   { -- | Stop the test after given number of seconds. The chairman will
@@ -51,7 +39,7 @@ data RunOpts = RunOpts
   , caMinProgress :: !BlockNo
   , caSocketPaths :: ![SocketPath]
   , caConfigYaml :: !ConfigYamlFilePath
-  , caSecurityParam :: !SecurityParam
+  , caConsensusMode :: !AnyConsensusModeParams
   , caNetworkMagic :: !NetworkMagic
   }
 
@@ -82,14 +70,6 @@ parseRunningTime =
     <> help "Run the chairman for this length of time in seconds."
     )
 
-parseSecurityParam :: Parser SecurityParam
-parseSecurityParam =
-  option (SecurityParam <$> Opt.auto)
-    ( long "security-parameter"
-    <> metavar "INT"
-    <> help "Security parameter"
-    )
-
 
 parseTestnetMagic :: Parser NetworkMagic
 parseTestnetMagic =
@@ -100,6 +80,35 @@ parseTestnetMagic =
       <> Opt.help "The testnet network magic number"
       )
 
+pConsensusModeParams :: Parser AnyConsensusModeParams
+pConsensusModeParams = asum
+  [ Opt.flag' (AnyConsensusModeParams ShelleyModeParams)
+      (  Opt.long "shelley-mode"
+      <> Opt.help "For talking to a node running in Shelley-only mode."
+      )
+  , Opt.flag' ()
+      (  Opt.long "byron-mode"
+      <> Opt.help "For talking to a node running in Byron-only mode."
+      )
+       *> pByronConsensusMode
+  , Opt.flag' ()
+      (  Opt.long "cardano-mode"
+      <> Opt.help "For talking to a node running in full Cardano mode (default)."
+      )
+       *> pCardanoConsensusMode
+  , -- Default to the Cardano consensus mode.
+    pure . AnyConsensusModeParams . CardanoModeParams $ EpochSlots defaultByronEpochSlots
+  ]
+ where
+   pCardanoConsensusMode :: Parser AnyConsensusModeParams
+   pCardanoConsensusMode = AnyConsensusModeParams . CardanoModeParams <$> pEpochSlots
+
+   pByronConsensusMode :: Parser AnyConsensusModeParams
+   pByronConsensusMode = AnyConsensusModeParams . ByronModeParams <$> pEpochSlots
+
+   defaultByronEpochSlots :: Word64
+   defaultByronEpochSlots = 21600
+
 parseProgress :: Parser BlockNo
 parseProgress =
   option ((fromIntegral :: Int -> BlockNo) <$> auto)
@@ -109,6 +118,8 @@ parseProgress =
     <> help "Require this much chain-growth progress, in blocks."
   )
 
+
+
 parseRunOpts :: Parser RunOpts
 parseRunOpts =
   RunOpts
@@ -116,7 +127,7 @@ parseRunOpts =
   <*> parseProgress
   <*> some (parseSocketPath "Path to a cardano-node socket")
   <*> fmap ConfigYamlFilePath parseConfigFile
-  <*> parseSecurityParam
+  <*> pConsensusModeParams
   <*> parseTestnetMagic
 
 run :: RunOpts -> IO ()
@@ -125,23 +136,23 @@ run RunOpts
     , caMinProgress
     , caSocketPaths
     , caConfigYaml
-    , caSecurityParam
+    , caConsensusMode
     , caNetworkMagic
     } = do
 
-  partialNc <- liftIO . parseNodeConfigurationFP $ Just caConfigYaml
+  configYamlPc <- liftIO . parseNodeConfigurationFP $ Just caConfigYaml
 
-  ptcl <- case pncProtocol partialNc of
-            Left err -> panic $ "Chairman error: " <> err
-            Right protocol -> return protocol
+  nc <- case makeNodeConfiguration configYamlPc of
+            Left err -> panic $ "Error in creating the NodeConfiguration: " <> Text.pack err
+            Right nc' -> return nc'
 
-  let someNodeClientProtocol = mkNodeClientProtocol ptcl
+  let localNodeCliParams = mkLocalNodeClientParams caConsensusMode const
 
   chairmanTest
     (timed stdoutTracer)
-    someNodeClientProtocol
+    localNodeCliParams
     caNetworkMagic
-    caSecurityParam
+    caConsensusMode
     caRunningTime
     caMinProgress
     caSocketPaths

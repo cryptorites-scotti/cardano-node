@@ -17,10 +17,12 @@ module Cardano.Api.Block (
     -- * Blocks in the context of an era
     Block(.., Block),
     BlockHeader(..),
+    getBlockHeader,
 
     -- ** Blocks in the context of a consensus mode
     BlockInMode(..),
     fromConsensusBlock,
+    toConsensusBlock,
 
     -- * Points on the chain
     ChainPoint(..),
@@ -30,6 +32,7 @@ module Cardano.Api.Block (
     fromConsensusPoint,
     toConsensusPointInMode,
     fromConsensusPointInMode,
+    toConsensusPointHF,
 
     -- * Tip of the chain
     ChainTip(..),
@@ -191,7 +194,6 @@ data BlockInMode mode where
 
 deriving instance Show (BlockInMode mode)
 
-
 fromConsensusBlock :: ConsensusBlockForMode mode ~ block
                    => ConsensusMode mode -> block -> BlockInMode mode
 fromConsensusBlock ByronMode =
@@ -225,6 +227,9 @@ fromConsensusBlock CardanoMode =
       Consensus.BlockAlonzo b' ->
         BlockInMode (ShelleyBlock ShelleyBasedEraAlonzo b')
                      AlonzoEraInCardanoMode
+
+toConsensusBlock :: BlockInMode mode -> block
+toConsensusBlock _ = error ""
 
 -- ----------------------------------------------------------------------------
 -- Block headers

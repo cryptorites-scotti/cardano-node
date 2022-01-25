@@ -140,6 +140,7 @@ module Cardano.Api (
     -- ** Blocks in the context of an era
     Block(Block),
     BlockHeader(..),
+    getBlockHeader,
 
     -- ** Points on the chain
     ChainPoint(..),
@@ -149,6 +150,10 @@ module Cardano.Api (
     ChainTip(..),
     BlockNo(..),
     chainTipToChainPoint,
+    fromConsensusTip,
+    fromConsensusPointInMode,
+    toConsensusPointInMode,
+    toConsensusPointHF,
 
     -- * Building transactions
 
@@ -525,14 +530,17 @@ module Cardano.Api (
     LocalNodeConnectInfo(..),
     AnyConsensusMode(..),
     renderMode,
-    ConsensusMode(CardanoMode),
+    ConsensusMode(..),
     consensusModeOnly,
     ConsensusModeIsMultiEra(..),
     AnyConsensusModeParams(..),
     ConsensusModeParams(..),
+    ConsensusBlockForMode,
     EraInMode(..),
     toEraInMode,
     LocalNodeClientProtocols(..),
+    LocalNodeClientParams(..),
+    mkLocalNodeClientParams,
     LocalChainSyncClient(..),
     CardanoMode,
 --  connectToRemoteNode,
@@ -543,6 +551,8 @@ module Cardano.Api (
     ChainSyncClient(..),
     ChainSyncClientPipelined(..),
     BlockInMode(..),
+    fromConsensusBlock,
+    toConsensusBlock,
     LocalNodeClientProtocolsInMode,
 
     -- *** Local tx submission
