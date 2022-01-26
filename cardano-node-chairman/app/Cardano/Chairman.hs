@@ -61,41 +61,41 @@ import           Cardano.Node.Configuration.NodeAddress (SocketPath (..))
 -- is only checked at the end.
 chairmanTest
   :: Tracer IO String
-  -> LocalNodeClientParams
   -> NetworkId
-  -> SecurityParam
   -> DiffTime
   -> BlockNo
   -> [SocketPath]
+  -> AnyConsensusModeParams
   -> IO ()
-chairmanTest tracer (LocalNodeClientParams ptclClientInfo _) nw securityParam runningTime progressThreshold socketPaths = do
+chairmanTest tracer nw runningTime progressThreshold socketPaths
+             (AnyConsensusModeParams cModeParams) = do
   traceWith tracer ("Will observe nodes for " ++ show runningTime)
   traceWith tracer ("Will require chain growth of " ++ show progressThreshold)
 
   -- Run the chairman and get the final snapshot of the chain from each node.
-  chainsSnapshot <- error ""
-    --runChairman
-    --  tracer
-    --  nw
-    --  securityParam
-    --  runningTime
-    --  socketPaths
-    --  (error "")
-    --  (error "")
+  chainsSnapshot <-
+      obtainGetHeader (consensusModeOnly cModeParams) $
+       runChairman
+        tracer
+        nw
+        runningTime
+        socketPaths
+        cModeParams
 
   traceWith tracer "================== chairman results =================="
 
   -- Test if we achieved consensus
-  --consensusSuccess <- either throwIO return $
-  --                      consensusCondition' securityParam (error "cMode") chainsSnapshot
+  consensusSuccess <- either throwIO return $
+                        obtainHasHeader (consensusModeOnly cModeParams) $
+                        consensusCondition' (consensusModeOnly cModeParams) chainsSnapshot
 
-  --traceWith tracer (show consensusSuccess)
+  traceWith tracer (show consensusSuccess)
 
   -- Test if we made adequate progress
-  --progressSuccess <- either throwIO return $
-  --                      progressCondition progressThreshold $ error "consensusSuccess"
+  progressSuccess <- either throwIO return $
+                        progressCondition' progressThreshold $ error "consensusSuccess"
 
-  --traceWith tracer (show progressSuccess)
+  traceWith tracer (show progressSuccess)
   traceWith tracer "================== chairman results =================="
 
 type ChainsSnapshot blk = Map PeerId (AnchoredFragment (Header blk))
@@ -222,6 +222,7 @@ data ConsensusSuccess' = ConsensusSuccess'
     ChainPoint
     -- Chain tip for each chain
     [(PeerId, ChainTip)]
+    deriving Show
 
 
 data ConsensusFailure' = ConsensusFailure'
@@ -237,11 +238,10 @@ data ConsensusFailure' = ConsensusFailure'
 consensusCondition'
   :: ConsensusBlockForMode mode ~ blk
   => HasHeader (Header blk)
-  => SecurityParam
-  -> ConsensusMode mode
+  => ConsensusMode mode
   -> Map PeerId (AnchoredFragment (Header blk))
   -> Either ConsensusFailure' ConsensusSuccess'
-consensusCondition' (SecurityParam securityParam) cMode chains =
+consensusCondition' cMode chains =
     -- The (forkTooLong . chainForkPoints) predicate is not transitive.
     -- As a consequence, we need to check it between all the pairs of chains:
     let forks =
@@ -260,7 +260,7 @@ consensusCondition' (SecurityParam securityParam) cMode chains =
                 (peerid1, apiTip1)
                 (peerid2, apiTip2)
                 interSectChainPt
-                (SecurityParam securityParam)
+                securityParam
           Nothing ->
             Right $
               ConsensusSuccess'
@@ -272,6 +272,7 @@ consensusCondition' (SecurityParam securityParam) cMode chains =
                 [ (peerid, fromConsensusTip cMode $ AF.anchorToTip (AF.headAnchor chain))
                 | (peerid, chain) <- Map.toList chains ]
   where
+    securityParam = SecurityParam 21600
     chainForkPoints
       :: HasHeader (Header blk)
       => AnchoredFragment (Header blk)
@@ -302,8 +303,8 @@ consensusCondition' (SecurityParam securityParam) cMode chains =
         -- If only one of len1, len2 is longer than the securityParam then it is
         -- still OK. That node can still recover by receiving a valid rollback
         -- instruction, but if both are longer, then we have a failure.
-        forkLen tip1 > securityParam &&
-        forkLen tip2 > securityParam
+        forkLen tip1 >  maxRollbacks securityParam &&
+        forkLen tip2 >  maxRollbacks securityParam
       where
         forkLen :: Anchor (Header blk) -> Word64
         forkLen tip =
@@ -325,6 +326,14 @@ data ProgressFailure blk =
        (Tip (Header blk))
   deriving Show
 
+data ProgressFailure' =
+     ProgressFailure'
+       BlockNo -- minimum expected
+       PeerId
+       ChainTip
+  deriving Show
+
+
 instance HasHeader blk => Exception (ProgressFailure blk) where
   displayException (ProgressFailure minBlockNo peerid tip) =
     concat
@@ -332,6 +341,15 @@ instance HasHeader blk => Exception (ProgressFailure blk) where
       , "the node at ", show peerid, " has chain tip ", show tip, "\n"
       , "while the mininum expected block number is ", show minBlockNo
       ]
+
+instance Exception ProgressFailure' where
+  displayException (ProgressFailure' minBlockNo peerid tip) =
+    concat
+      [ "progress failure:\n"
+      , "the node at ", show peerid, " has chain tip ", show tip, "\n"
+      , "while the mininum expected block number is ", show minBlockNo
+      ]
+
 
 -- | Progress is defined as each chain being at least of a certain length.
 --
@@ -343,18 +361,18 @@ progressCondition minBlockNo (ConsensusSuccess _ tips) =
     Just (peerid, tip) -> Left (ProgressFailure minBlockNo peerid tip)
     Nothing            -> Right (ProgressSuccess minBlockNo)
 
---type family ModeDelta mode = (r :: Type) | r -> mode
 
+progressCondition' :: BlockNo
+                   -> ConsensusSuccess'
+                  -> Either ProgressFailure' ProgressSuccess
+progressCondition' = error ""
 
 runChairman
   :: forall mode blk. ConsensusBlockForMode mode ~ blk
   => GetHeader (ConsensusBlockForMode mode)
-  => HasHeader (Header blk)
-  => HasHeader (Header (ConsensusModeParams mode))
   => Show ChairmanTrace'
   => Tracer IO String
   -> NetworkId
-  -> SecurityParam
   -- ^ Security parameter, if a fork is deeper than it 'runChairman'
   -- will throw an exception.
   -> DiffTime
@@ -362,13 +380,12 @@ runChairman
   -> [SocketPath]
   -- ^ Local socket directory
   -> ConsensusModeParams mode
-  -> LocalNodeConnectInfo mode
   -> IO (Map SocketPath
              (AF.AnchoredSeq
                 (WithOrigin SlotNo)
                 (Anchor (Header blk))
                 (Header blk)))
-runChairman tracer networkId securityParam runningTime socketPaths cModeParams ln = do
+runChairman tracer networkId runningTime socketPaths cModeParams = do
     let initialChains :: Map SocketPath (AF.AnchoredSeq (WithOrigin SlotNo) (Anchor (Header blk)) (Header blk))
         initialChains = Map.fromList
           [ (socketPath, AF.Empty AF.AnchorGenesis)
@@ -383,21 +400,16 @@ runChairman tracer networkId securityParam runningTime socketPaths cModeParams l
                           , localNodeNetworkId = networkId
                           , localNodeSocketPath = unSocketPath sockPath
                           }
+              chairmanChainSyncClient = LocalChainSyncChairman $ chainSyncClient' (showTracing tracer) sockPath chainsVar cModeParams
               protocolsInMode = LocalNodeClientProtocols
-                { localChainSyncClient    = determine chainsVar sockPath cModeParams
+                { localChainSyncClient = chairmanChainSyncClient
                 , localTxSubmissionClient = Nothing
-                , localStateQueryClient   = Nothing
+                , localStateQueryClient = Nothing
                 }
           in connectToLocalNode localConnInfo protocolsInMode
 
     atomically (readTVar chainsVar)
- where
-   determine
-     :: StrictTVar IO (Map SocketPath (AnchoredFragment (Header (ConsensusBlockForMode mode))))
-     -> SocketPath
-     -> ConsensusModeParams mode
-     -> LocalChainSyncClient (BlockInMode mode) ChainPoint ChainTip IO
-   determine chainsVar sockPath cModeParams' = LocalChainSyncChairman $ chainSyncClient' (showTracing tracer) sockPath chainsVar cModeParams'
+
 -- catch 'MuxError'; it will be thrown if a node shuts down closing the
 -- connection.
 handleMuxError
@@ -560,13 +572,17 @@ obtainHasHeader ByronMode f = f
 obtainHasHeader ShelleyMode f = f
 obtainHasHeader CardanoMode f = f
 
-obtainConsensus
+
+obtainGetHeader
   :: ConsensusMode mode
-  -> (HasHeader ( (ConsensusBlockForMode mode)) => a)
+  -> ( (GetHeader (ConsensusBlockForMode mode)
+       ) => a)
   -> a
-obtainConsensus ByronMode f = f
-obtainConsensus ShelleyMode f = f
-obtainConsensus CardanoMode f = f
+obtainGetHeader ByronMode f = f
+obtainGetHeader ShelleyMode f = f
+obtainGetHeader CardanoMode f = f
+
+
 
 -- | 'ChainSyncClient' which build chain fragment; on every roll forward it will
 -- check if there is consensus on immutable chain.

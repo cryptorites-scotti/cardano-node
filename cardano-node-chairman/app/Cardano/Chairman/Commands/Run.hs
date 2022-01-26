@@ -40,7 +40,7 @@ data RunOpts = RunOpts
   , caSocketPaths :: ![SocketPath]
   , caConfigYaml :: !ConfigYamlFilePath
   , caConsensusMode :: !AnyConsensusModeParams
-  , caNetworkMagic :: !NetworkMagic
+  , caNetworkId :: !NetworkId
   }
 
 parseConfigFile :: Parser FilePath
@@ -71,9 +71,9 @@ parseRunningTime =
     )
 
 
-parseTestnetMagic :: Parser NetworkMagic
+parseTestnetMagic :: Parser NetworkId
 parseTestnetMagic =
-  NetworkMagic <$>
+  Testnet . NetworkMagic <$>
     Opt.option Opt.auto
       (  Opt.long "testnet-magic"
       <> Opt.metavar "INT"
@@ -109,6 +109,17 @@ pConsensusModeParams = asum
    defaultByronEpochSlots :: Word64
    defaultByronEpochSlots = 21600
 
+   pEpochSlots :: Parser EpochSlots
+   pEpochSlots =
+     EpochSlots <$>
+       Opt.option Opt.auto
+         (  Opt.long "epoch-slots"
+         <> Opt.metavar "NATURAL"
+         <> Opt.help "The number of slots per epoch for the Byron era."
+         <> Opt.value defaultByronEpochSlots -- Default to the mainnet value.
+         <> Opt.showDefault
+         )
+
 parseProgress :: Parser BlockNo
 parseProgress =
   option ((fromIntegral :: Int -> BlockNo) <$> auto)
@@ -137,7 +148,7 @@ run RunOpts
     , caSocketPaths
     , caConfigYaml
     , caConsensusMode
-    , caNetworkMagic
+    , caNetworkId
     } = do
 
   configYamlPc <- liftIO . parseNodeConfigurationFP $ Just caConfigYaml
@@ -146,16 +157,14 @@ run RunOpts
             Left err -> panic $ "Error in creating the NodeConfiguration: " <> Text.pack err
             Right nc' -> return nc'
 
-  let localNodeCliParams = mkLocalNodeClientParams caConsensusMode const
 
   chairmanTest
     (timed stdoutTracer)
-    localNodeCliParams
-    caNetworkMagic
-    caConsensusMode
+    caNetworkId
     caRunningTime
     caMinProgress
     caSocketPaths
+    caConsensusMode
 
   return ()
 
