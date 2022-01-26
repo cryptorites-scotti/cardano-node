@@ -536,6 +536,7 @@ module Cardano.Api (
     AnyConsensusModeParams(..),
     ConsensusModeParams(..),
     ConsensusBlockForMode,
+    ConsensusBlockForEra,
     EraInMode(..),
     toEraInMode,
     LocalNodeClientProtocols(..),
@@ -619,6 +620,7 @@ module Cardano.Api (
     fromLedgerPParams,
     toCtxUTxOTxOut,
     --TODO: arrange not to export these
+    fromNetworkMagic,
     toNetworkMagic,
     fromLedgerTxOuts,
     toLedgerUTxO,
@@ -664,6 +666,7 @@ import           Cardano.Api.LedgerState
 import           Cardano.Api.Modes
 import           Cardano.Api.NetworkId
 import           Cardano.Api.OperationalCertificate
+import           Cardano.Api.Protocol.Types
 import           Cardano.Api.ProtocolParameters
 import           Cardano.Api.Query hiding (LedgerState (..))
 import           Cardano.Api.Script
@@ -680,5 +683,3 @@ import           Cardano.Api.TxMetadata
 import           Cardano.Api.Utils
 import           Cardano.Api.Value
 import           Cardano.Api.ValueParser
---TODO: Remove after updating cardano-node-chairman with new IPC
-import           Cardano.Api.Protocol.Types

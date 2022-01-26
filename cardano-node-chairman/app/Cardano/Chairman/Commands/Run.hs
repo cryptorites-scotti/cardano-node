@@ -14,19 +14,21 @@ import           Control.Tracer (Tracer (..), stdoutTracer)
 import qualified Data.Text as Text
 import qualified Data.Time.Clock as DTC
 import           Options.Applicative
-import qualified Options.Applicative as Opt
 import qualified System.IO as IO
 
 import           Cardano.Node.Configuration.NodeAddress
-import           Cardano.Node.Configuration.POM (makeNodeConfiguration, parseNodeConfigurationFP,
-                   pncProtocol)
-import           Cardano.Node.Protocol.Types (Protocol (..))
+import           Cardano.Node.Configuration.POM (NodeConfiguration (..), makeNodeConfiguration,
+                   parseNodeConfigurationFP)
+import           Cardano.Node.Protocol
 import           Cardano.Node.Types
+import qualified Ouroboros.Consensus.Config as Consensus
 import           Ouroboros.Consensus.Config.SecurityParam (SecurityParam (..))
+import           Ouroboros.Consensus.Config.SupportsNode
+import           Ouroboros.Consensus.Node.ProtocolInfo
+
 
 import           Cardano.Api
-import           Cardano.Api.Protocol.Cardano
-import           Cardano.Api.Protocol.Shelley
+import qualified Cardano.Api.Protocol.Types as Protocol
 import           Cardano.Chairman (chairmanTest)
 
 data RunOpts = RunOpts
@@ -39,8 +41,6 @@ data RunOpts = RunOpts
   , caMinProgress :: !BlockNo
   , caSocketPaths :: ![SocketPath]
   , caConfigYaml :: !ConfigYamlFilePath
-  , caConsensusMode :: !AnyConsensusModeParams
-  , caNetworkId :: !NetworkId
   }
 
 parseConfigFile :: Parser FilePath
@@ -70,56 +70,6 @@ parseRunningTime =
     <> help "Run the chairman for this length of time in seconds."
     )
 
-
-parseTestnetMagic :: Parser NetworkId
-parseTestnetMagic =
-  Testnet . NetworkMagic <$>
-    Opt.option Opt.auto
-      (  Opt.long "testnet-magic"
-      <> Opt.metavar "INT"
-      <> Opt.help "The testnet network magic number"
-      )
-
-pConsensusModeParams :: Parser AnyConsensusModeParams
-pConsensusModeParams = asum
-  [ Opt.flag' (AnyConsensusModeParams ShelleyModeParams)
-      (  Opt.long "shelley-mode"
-      <> Opt.help "For talking to a node running in Shelley-only mode."
-      )
-  , Opt.flag' ()
-      (  Opt.long "byron-mode"
-      <> Opt.help "For talking to a node running in Byron-only mode."
-      )
-       *> pByronConsensusMode
-  , Opt.flag' ()
-      (  Opt.long "cardano-mode"
-      <> Opt.help "For talking to a node running in full Cardano mode (default)."
-      )
-       *> pCardanoConsensusMode
-  , -- Default to the Cardano consensus mode.
-    pure . AnyConsensusModeParams . CardanoModeParams $ EpochSlots defaultByronEpochSlots
-  ]
- where
-   pCardanoConsensusMode :: Parser AnyConsensusModeParams
-   pCardanoConsensusMode = AnyConsensusModeParams . CardanoModeParams <$> pEpochSlots
-
-   pByronConsensusMode :: Parser AnyConsensusModeParams
-   pByronConsensusMode = AnyConsensusModeParams . ByronModeParams <$> pEpochSlots
-
-   defaultByronEpochSlots :: Word64
-   defaultByronEpochSlots = 21600
-
-   pEpochSlots :: Parser EpochSlots
-   pEpochSlots =
-     EpochSlots <$>
-       Opt.option Opt.auto
-         (  Opt.long "epoch-slots"
-         <> Opt.metavar "NATURAL"
-         <> Opt.help "The number of slots per epoch for the Byron era."
-         <> Opt.value defaultByronEpochSlots -- Default to the mainnet value.
-         <> Opt.showDefault
-         )
-
 parseProgress :: Parser BlockNo
 parseProgress =
   option ((fromIntegral :: Int -> BlockNo) <$> auto)
@@ -138,8 +88,6 @@ parseRunOpts =
   <*> parseProgress
   <*> some (parseSocketPath "Path to a cardano-node socket")
   <*> fmap ConfigYamlFilePath parseConfigFile
-  <*> pConsensusModeParams
-  <*> parseTestnetMagic
 
 run :: RunOpts -> IO ()
 run RunOpts
@@ -147,8 +95,6 @@ run RunOpts
     , caMinProgress
     , caSocketPaths
     , caConfigYaml
-    , caConsensusMode
-    , caNetworkId
     } = do
 
   configYamlPc <- liftIO . parseNodeConfigurationFP $ Just caConfigYaml
@@ -157,16 +103,42 @@ run RunOpts
             Left err -> panic $ "Error in creating the NodeConfiguration: " <> Text.pack err
             Right nc' -> return nc'
 
+  eitherSomeProtocol <- runExceptT $ mkConsensusProtocol nc
+
+  p :: SomeConsensusProtocol <-
+    case eitherSomeProtocol of
+      Left err -> putStrLn (displayError err) >> exitFailure
+      Right p  -> pure p
+
+  let (k, nId) = case p of
+            SomeConsensusProtocol _ runP ->
+              let ProtocolInfo { pInfoConfig } = Protocol.protocolInfo runP
+              in ( Consensus.configSecurityParam pInfoConfig
+                 , fromNetworkMagic . getNetworkMagic $ Consensus.configBlock pInfoConfig
+                 )
+
+      consensusModeParams = getConsensusMode k nc
 
   chairmanTest
     (timed stdoutTracer)
-    caNetworkId
+    nId
     caRunningTime
     caMinProgress
     caSocketPaths
-    caConsensusMode
+    consensusModeParams
+    k
 
   return ()
+ where
+  getConsensusMode :: SecurityParam -> NodeConfiguration -> AnyConsensusModeParams
+  getConsensusMode (SecurityParam k) NodeConfiguration{ncProtocolConfig} =
+    case ncProtocolConfig of
+      NodeProtocolConfigurationByron{} ->
+        AnyConsensusModeParams $ ByronModeParams $ EpochSlots k
+      NodeProtocolConfigurationShelley{} ->
+        AnyConsensusModeParams ShelleyModeParams
+      NodeProtocolConfigurationCardano{} ->
+        AnyConsensusModeParams $ CardanoModeParams $ EpochSlots k
 
 timed :: Tracer IO a -> Tracer IO a
 timed (Tracer runTracer) = Tracer $ \a -> do

@@ -2,9 +2,9 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 {-# OPTIONS_GHC -Wno-unticked-promoted-constructors #-}
@@ -15,36 +15,25 @@ import           Cardano.Prelude hiding (ByteString, STM, atomically, catch, opt
 import           Prelude (String, error, show)
 
 import           Control.Monad.Class.MonadAsync
-import           Control.Monad.Class.MonadST
 import           Control.Monad.Class.MonadSTM.Strict
 import           Control.Monad.Class.MonadThrow
 import           Control.Monad.Class.MonadTimer
 import           Control.Tracer
-import           Data.ByteString.Lazy (ByteString)
 import           Data.Coerce (coerce)
 import qualified Data.Map.Strict as Map
 
-import           Ouroboros.Consensus.Block (CodecConfig, GetHeader (..), Header)
+import           Ouroboros.Consensus.Block.Abstract
 import           Ouroboros.Consensus.Config.SecurityParam
-import           Ouroboros.Consensus.Ledger.SupportsMempool (ApplyTxErr, GenTx)
-import           Ouroboros.Consensus.Network.NodeToClient
-import           Ouroboros.Consensus.Node.NetworkProtocolVersion (HasNetworkProtocolVersion (..),
-                   supportedNodeToClientVersions)
-import           Ouroboros.Consensus.Node.Run
+
 import           Ouroboros.Network.AnchoredFragment (Anchor, AnchoredFragment)
 import qualified Ouroboros.Network.AnchoredFragment as AF
-import           Ouroboros.Network.Block (HasHeader, Point, Tip)
+import           Ouroboros.Network.Block (Tip)
 import qualified Ouroboros.Network.Block as Block
-import           Ouroboros.Network.Mux
-import           Ouroboros.Network.NodeToClient
-import           Ouroboros.Network.Point (WithOrigin (..), fromWithOrigin)
 import           Ouroboros.Network.Protocol.ChainSync.Client
-import           Ouroboros.Network.Protocol.ChainSync.Type
-import           Ouroboros.Network.Protocol.LocalTxSubmission.Type
 
 import           Cardano.Api
+import           Cardano.Api.Shelley
 import           Cardano.Node.Configuration.NodeAddress (SocketPath (..))
-
 
 -- | The chairman checks for consensus and progress.
 --
@@ -66,28 +55,30 @@ chairmanTest
   -> BlockNo
   -> [SocketPath]
   -> AnyConsensusModeParams
+  -> SecurityParam
   -> IO ()
 chairmanTest tracer nw runningTime progressThreshold socketPaths
-             (AnyConsensusModeParams cModeParams) = do
+             (AnyConsensusModeParams cModeParams) secParam = do
   traceWith tracer ("Will observe nodes for " ++ show runningTime)
   traceWith tracer ("Will require chain growth of " ++ show progressThreshold)
 
   -- Run the chairman and get the final snapshot of the chain from each node.
   chainsSnapshot <-
-      obtainGetHeader (consensusModeOnly cModeParams) $
-       runChairman
-        tracer
-        nw
-        runningTime
-        socketPaths
-        cModeParams
+    obtainGetHeader (consensusModeOnly cModeParams) $
+     runChairman
+      tracer
+      nw
+      runningTime
+      socketPaths
+      cModeParams
+      secParam
 
   traceWith tracer "================== chairman results =================="
 
   -- Test if we achieved consensus
   consensusSuccess <- either throwIO return $
                         obtainHasHeader (consensusModeOnly cModeParams) $
-                        consensusCondition' (consensusModeOnly cModeParams) chainsSnapshot
+                        consensusCondition (consensusModeOnly cModeParams) chainsSnapshot secParam
 
   traceWith tracer (show consensusSuccess)
 
@@ -98,16 +89,7 @@ chairmanTest tracer nw runningTime progressThreshold socketPaths
   traceWith tracer (show progressSuccess)
   traceWith tracer "================== chairman results =================="
 
-type ChainsSnapshot blk = Map PeerId (AnchoredFragment (Header blk))
-
 type PeerId = SocketPath
-
-data ConsensusSuccess blk = ConsensusSuccess
-    -- Minimum of the maximum intersection points
-    (Anchor (Header blk))
-    -- Chain tip for each chain
-    [(PeerId, Tip (Header blk))]
-  deriving Show
 
 data ConsensusFailure blk = ConsensusFailure
     -- Tip of two peer's chains that do not intersect within K blocks
@@ -146,102 +128,16 @@ instance HasHeader blk => Exception (ConsensusFailure blk) where
 
 -- | For this test we define consensus as follows: for all pairs of chains,
 -- the intersection of each pair is within K blocks of each tip.
+
 consensusCondition
-  :: HasHeader (Header blk)
-  => SecurityParam
-  -> ChainsSnapshot blk
-  -> Either (ConsensusFailure blk) (ConsensusSuccess blk)
-consensusCondition (SecurityParam securityParam) chains =
-    -- The (forkTooLong . chainForkPoints) predicate is not transitive.
-    -- As a consequence, we need to check it between all the pairs of chains:
-    let forks =
-          [ ((peerid1, peerid2), chainForkPoints chain1 chain2)
-          | (peerid1, chain1) <- Map.toList chains
-          , (peerid2, chain2) <- Map.toList chains
-          ]
-     in case find (forkTooLong . snd) forks of
-          Just ((peerid1, peerid2), (intersection, tip1, tip2)) ->
-            Left $
-              ConsensusFailure
-                (peerid1, AF.anchorToTip tip1)
-                (peerid2, AF.anchorToTip tip2)
-                intersection
-                (SecurityParam securityParam)
-          Nothing ->
-            Right $
-              ConsensusSuccess
-                -- the minimum intersection point:
-                (minimumBy (comparing AF.anchorToBlockNo)
-                           [ intersection | (_,(intersection,_,_)) <- forks ])
-                -- all the chain tips:
-                [ (peerid, AF.anchorToTip (AF.headAnchor chain))
-                | (peerid, chain) <- Map.toList chains ]
-  where
-    chainForkPoints
-      :: HasHeader (Header blk)
-      => AnchoredFragment (Header blk)
-      -> AnchoredFragment (Header blk)
-      -> ( Anchor (Header blk) -- intersection
-         , Anchor (Header blk) -- tip of c1
-         , Anchor (Header blk) -- tip of c2
-         )
-    chainForkPoints chain1 chain2 =
-      case AF.intersect chain1 chain2 of
-        -- chains are anochored at the genesis, so their intersection is never
-        -- empty
-        Nothing -> error "chainChains: invariant violation"
-
-        Just (_, _, extension1, extension2) ->
-          ( AF.anchor     extension1
-          , AF.headAnchor extension1
-          , AF.headAnchor extension2
-          )
-
-    forkTooLong
-      :: ( Anchor (Header blk) -- intersection
-         , Anchor (Header blk) -- tip of chain1
-         , Anchor (Header blk) -- tip of chain2
-         )
-      -> Bool
-    forkTooLong (intersection, tip1, tip2) =
-        -- If only one of len1, len2 is longer than the securityParam then it is
-        -- still OK. That node can still recover by receiving a valid rollback
-        -- instruction, but if both are longer, then we have a failure.
-        forkLen tip1 > securityParam &&
-        forkLen tip2 > securityParam
-      where
-        forkLen :: Anchor (Header blk) -> Word64
-        forkLen tip =
-          Block.unBlockNo $
-            fromWithOrigin 0 (AF.anchorToBlockNo tip)
-          - fromWithOrigin 0 (AF.anchorToBlockNo intersection)
-
-
-data ConsensusSuccess' = ConsensusSuccess'
-    -- Minimum of the maximum intersection points
-    ChainPoint
-    -- Chain tip for each chain
-    [(PeerId, ChainTip)]
-    deriving Show
-
-
-data ConsensusFailure' = ConsensusFailure'
-    -- Tip of two peer's chains that do not intersect within K blocks
-    (PeerId, ChainTip)
-    (PeerId, ChainTip)
-    -- The intersection point of two chains
-    ChainPoint
-    SecurityParam
-    deriving Show
-
-
-consensusCondition'
   :: ConsensusBlockForMode mode ~ blk
   => HasHeader (Header blk)
+  => ConvertRawHash blk
   => ConsensusMode mode
   -> Map PeerId (AnchoredFragment (Header blk))
-  -> Either ConsensusFailure' ConsensusSuccess'
-consensusCondition' cMode chains =
+  -> SecurityParam
+  -> Either ConsensusFailure' ConsensusSuccess
+consensusCondition cMode chains securityParam =
     -- The (forkTooLong . chainForkPoints) predicate is not transitive.
     -- As a consequence, we need to check it between all the pairs of chains:
     let forks =
@@ -263,7 +159,7 @@ consensusCondition' cMode chains =
                 securityParam
           Nothing ->
             Right $
-              ConsensusSuccess'
+              ConsensusSuccess
                 -- the minimum intersection point:
                 (fromAnchor
                    $ minimumBy (comparing AF.anchorToBlockNo)
@@ -272,7 +168,6 @@ consensusCondition' cMode chains =
                 [ (peerid, fromConsensusTip cMode $ AF.anchorToTip (AF.headAnchor chain))
                 | (peerid, chain) <- Map.toList chains ]
   where
-    securityParam = SecurityParam 21600
     chainForkPoints
       :: HasHeader (Header blk)
       => AnchoredFragment (Header blk)
@@ -313,37 +208,42 @@ consensusCondition' cMode chains =
           - fromWithOrigin 0 (AF.anchorToBlockNo intersection)
 
 
-fromAnchor :: Anchor blk -> ChainPoint
-fromAnchor _ = error ""
+data ConsensusSuccess = ConsensusSuccess
+    -- Minimum of the maximum intersection points
+    ChainPoint
+    -- Chain tip for each chain
+    [(PeerId, ChainTip)]
+    deriving Show
+
+
+data ConsensusFailure' = ConsensusFailure'
+    -- Tip of two peer's chains that do not intersect within K blocks
+    (PeerId, ChainTip)
+    (PeerId, ChainTip)
+    -- The intersection point of two chains
+    ChainPoint
+    SecurityParam
+    deriving Show
+
+fromAnchor :: forall blk. ConvertRawHash blk => Anchor (Header blk) -> ChainPoint
+fromAnchor AF.AnchorGenesis = ChainPointAtGenesis
+fromAnchor (AF.Anchor slot headerhash _blockNo) =
+  let sbs = toShortRawHash (Proxy @blk) headerhash
+  in ChainPoint slot $ HeaderHash sbs
 
 newtype ProgressSuccess = ProgressSuccess BlockNo
   deriving Show
 
-data ProgressFailure blk =
+data ProgressFailure =
      ProgressFailure
-       BlockNo -- minimum expected
-       PeerId
-       (Tip (Header blk))
-  deriving Show
-
-data ProgressFailure' =
-     ProgressFailure'
        BlockNo -- minimum expected
        PeerId
        ChainTip
   deriving Show
 
 
-instance HasHeader blk => Exception (ProgressFailure blk) where
+instance Exception ProgressFailure where
   displayException (ProgressFailure minBlockNo peerid tip) =
-    concat
-      [ "progress failure:\n"
-      , "the node at ", show peerid, " has chain tip ", show tip, "\n"
-      , "while the mininum expected block number is ", show minBlockNo
-      ]
-
-instance Exception ProgressFailure' where
-  displayException (ProgressFailure' minBlockNo peerid tip) =
     concat
       [ "progress failure:\n"
       , "the node at ", show peerid, " has chain tip ", show tip, "\n"
@@ -353,24 +253,14 @@ instance Exception ProgressFailure' where
 
 -- | Progress is defined as each chain being at least of a certain length.
 --
-progressCondition :: BlockNo
-                  -> ConsensusSuccess blk
-                  -> Either (ProgressFailure blk) ProgressSuccess
-progressCondition minBlockNo (ConsensusSuccess _ tips) =
-  case find (\(_, tip) -> Block.getTipBlockNo tip < At minBlockNo) tips of
-    Just (peerid, tip) -> Left (ProgressFailure minBlockNo peerid tip)
-    Nothing            -> Right (ProgressSuccess minBlockNo)
-
-
 progressCondition' :: BlockNo
-                   -> ConsensusSuccess'
-                  -> Either ProgressFailure' ProgressSuccess
+                   -> ConsensusSuccess
+                   -> Either ProgressFailure ProgressSuccess
 progressCondition' = error ""
 
 runChairman
   :: forall mode blk. ConsensusBlockForMode mode ~ blk
   => GetHeader (ConsensusBlockForMode mode)
-  => Show ChairmanTrace'
   => Tracer IO String
   -> NetworkId
   -- ^ Security parameter, if a fork is deeper than it 'runChairman'
@@ -380,12 +270,13 @@ runChairman
   -> [SocketPath]
   -- ^ Local socket directory
   -> ConsensusModeParams mode
+  -> SecurityParam
   -> IO (Map SocketPath
              (AF.AnchoredSeq
                 (WithOrigin SlotNo)
                 (Anchor (Header blk))
                 (Header blk)))
-runChairman tracer networkId runningTime socketPaths cModeParams = do
+runChairman tracer networkId runningTime socketPaths cModeParams secParam = do
     let initialChains :: Map SocketPath (AF.AnchoredSeq (WithOrigin SlotNo) (Anchor (Header blk)) (Header blk))
         initialChains = Map.fromList
           [ (socketPath, AF.Empty AF.AnchorGenesis)
@@ -400,7 +291,7 @@ runChairman tracer networkId runningTime socketPaths cModeParams = do
                           , localNodeNetworkId = networkId
                           , localNodeSocketPath = unSocketPath sockPath
                           }
-              chairmanChainSyncClient = LocalChainSyncChairman $ chainSyncClient' (showTracing tracer) sockPath chainsVar cModeParams
+              chairmanChainSyncClient = LocalChainSyncChairman $ chainSyncClient (showTracing tracer) sockPath chainsVar cModeParams secParam
               protocolsInMode = LocalNodeClientProtocols
                 { localChainSyncClient = chairmanChainSyncClient
                 , localTxSubmissionClient = Nothing
@@ -409,55 +300,6 @@ runChairman tracer networkId runningTime socketPaths cModeParams = do
           in connectToLocalNode localConnInfo protocolsInMode
 
     atomically (readTVar chainsVar)
-
--- catch 'MuxError'; it will be thrown if a node shuts down closing the
--- connection.
-handleMuxError
-  :: Tracer IO String
-  -> ChainsVar IO blk
-  -> SocketPath
-  -> MuxError
-  -> IO ()
-handleMuxError tracer chainsVar socketPath err = do
-  traceWith tracer (show err)
-  atomically $ modifyTVar chainsVar (Map.delete socketPath)
-
-createConnection
-  :: forall blk.
-     RunNode blk
-  => Tracer IO String
-  -> IOManager
-  -> CodecConfig blk
-  -> NetworkMagic
-  -> SocketPath
-  -> ChainsVar IO blk
-  -> SecurityParam
-  -> IO ()
-createConnection
-  tracer
-  iomgr
-  cfg
-  networkMagic
-  socketPath@(SocketPath path)
-  chainsVar
-  securityParam =
-      connectTo
-        (localSnocket iomgr)
-        NetworkConnectTracers
-          { nctMuxTracer       = nullTracer
-          , nctHandshakeTracer = nullTracer
-          }
-        (localInitiatorNetworkApplication
-            (showTracing tracer)
-            nullTracer
-            nullTracer
-            cfg
-            networkMagic
-            socketPath
-            chainsVar
-            securityParam)
-        path
-        `catch` handleMuxError tracer chainsVar socketPath
 
 -- Shared State, and its API.
 
@@ -478,8 +320,9 @@ addBlock
 addBlock sockPath chainsVar blk =
     modifyTVar chainsVar (Map.adjust (AF.addBlock (getHeader blk)) sockPath)
 
-
-rollback'
+-- | Rollback a single block.  If the rollback point is not found, we simply
+-- error.  It should never happen if the security parameter is set up correctly.
+rollback
   :: forall mode blk. ConsensusBlockForMode mode ~ blk
   => HasHeader (Header blk)
   => SocketPath
@@ -487,7 +330,7 @@ rollback'
   -> ConsensusMode mode
   -> ChainPoint
   -> STM IO ()
-rollback' sockPath chainsVar cMode p =
+rollback sockPath chainsVar cMode p =
   modifyTVar chainsVar (Map.adjust fn sockPath)
   where
     p' :: Point (Header (ConsensusBlockForMode mode))
@@ -499,43 +342,26 @@ rollback' sockPath chainsVar cMode p =
       Nothing  -> error "rollback error: rollback beyond chain fragment"
       Just cf' -> cf'
 
--- | Rollback a single block.  If the rollback point is not found, we simply
--- error.  It should never happen if the security parameter is set up correctly.
-rollback
-  :: forall blk m. (MonadSTM m, HasHeader (Header blk))
-  => SocketPath
-  -> ChainsVar m blk
-  -> Point blk
-  -> STM m ()
-rollback sockPath chainsVar p = modifyTVar chainsVar (Map.adjust fn sockPath)
-  where
-    p' :: Point (Header blk)
-    p' = coerce p
-
-    fn :: AnchoredFragment (Header blk) -> AnchoredFragment (Header blk)
-    fn cf = case AF.rollback p' cf of
-      Nothing  -> error "rollback error: rollback beyond chain fragment"
-      Just cf' -> cf'
-
 -- Chain-Sync client
-type ChairmanTrace blk = ConsensusSuccess blk
-type ChairmanTrace' = ConsensusSuccess'
+type ChairmanTrace' = ConsensusSuccess
 
 type ChainVar mode = StrictTVar IO (Map SocketPath (AnchoredFragment (Header (ConsensusBlockForMode mode))))
 
-chainSyncClient'
+-- | 'chainSyncClient which build chain fragment; on every roll forward it will
+-- check if there is consensus on immutable chain.
+chainSyncClient
   :: GetHeader (ConsensusBlockForMode mode)
   => Tracer IO ChairmanTrace'
   -> SocketPath
   -> ChainVar mode
   -> ConsensusModeParams mode
+  -> SecurityParam
   -> ChainSyncClient (BlockInMode mode) ChainPoint ChainTip IO ()
-chainSyncClient' tracer sockPath chainsVar cModeP = ChainSyncClient $ pure $
+chainSyncClient tracer sockPath chainsVar cModeP secParam = ChainSyncClient $ pure $
   -- Notify the core node about the our latest points at which we are
   -- synchronised.  This client is not persistent and thus it just
   -- synchronises from the genesis block.  A real implementation should send
   -- a list of points up to a point which is k blocks deep.
-  -- TODO: Convert from consensus mode to security parameter
   SendMsgFindIntersect
     [fromConsensusPointInMode (consensusModeOnly cModeP) Block.genesisPoint]
     ClientStIntersect
@@ -553,26 +379,29 @@ chainSyncClient' tracer sockPath chainsVar cModeP = ChainSyncClient $ pure $
           -- trace the decision or error
           res <- atomically $ do
             addBlock sockPath chainsVar $ toConsensusBlock blk
-            obtainHasHeader (consensusModeOnly cModeP) $ checkConsensus' (consensusModeOnly cModeP)  chainsVar (SecurityParam 21600)
+            obtainHasHeader (consensusModeOnly cModeP) $ checkConsensus (consensusModeOnly cModeP) chainsVar secParam
           traceWith tracer res
           pure clientStIdle
       , recvMsgRollBackward = \point _tip -> ChainSyncClient $ do
           -- rollback & check
           res <- atomically $ do
-            rollback' sockPath chainsVar (consensusModeOnly cModeP) point
-            obtainHasHeader (consensusModeOnly cModeP) $ checkConsensus' (consensusModeOnly cModeP) chainsVar (SecurityParam 21600)
+            rollback sockPath chainsVar (consensusModeOnly cModeP) point
+            obtainHasHeader (consensusModeOnly cModeP) $ checkConsensus (consensusModeOnly cModeP) chainsVar secParam
           traceWith tracer res
           pure clientStIdle
       }
+
 obtainHasHeader
-  :: ConsensusMode mode
-  -> (HasHeader (Header (ConsensusBlockForMode mode)) => a)
+  :: ConsensusBlockForMode mode ~ blk
+  => ConsensusMode mode
+  -> ((HasHeader (Header blk), ConvertRawHash (ConsensusBlockForMode mode)) => a)
   -> a
 obtainHasHeader ByronMode f = f
 obtainHasHeader ShelleyMode f = f
 obtainHasHeader CardanoMode f = f
 
 
+-- ConsensusBlockForEra
 obtainGetHeader
   :: ConsensusMode mode
   -> ( (GetHeader (ConsensusBlockForMode mode)
@@ -582,170 +411,16 @@ obtainGetHeader ByronMode f = f
 obtainGetHeader ShelleyMode f = f
 obtainGetHeader CardanoMode f = f
 
-
-
--- | 'ChainSyncClient' which build chain fragment; on every roll forward it will
--- check if there is consensus on immutable chain.
-chainSyncClient
-  :: forall blk m.
-     ( MonadSTM   m
-     , MonadThrow (STM m)
-     , MonadAsync m
-     , GetHeader blk
-     , HasHeader blk
-     )
-  => Tracer m (ChairmanTrace blk)
-  -> SocketPath
-  -> ChainsVar m blk
-  -> SecurityParam
-  -> ChainSyncClient blk (Point blk) (Tip blk) m ()
-chainSyncClient tracer sockPath chainsVar securityParam = ChainSyncClient $ pure $
-  -- Notify the core node about the our latest points at which we are
-  -- synchronised.  This client is not persistent and thus it just
-  -- synchronises from the genesis block.  A real implementation should send
-  -- a list of points up to a point which is k blocks deep.
-  SendMsgFindIntersect
-    [Block.genesisPoint]
-    ClientStIntersect
-    { recvMsgIntersectFound    = \_ _ -> ChainSyncClient (pure clientStIdle)
-    , recvMsgIntersectNotFound = \  _ -> ChainSyncClient (pure clientStIdle)
-    }
-  where
-    clientStIdle :: ClientStIdle blk (Point blk) (Tip blk) m ()
-    clientStIdle = SendMsgRequestNext clientStNext (pure clientStNext)
-
-    clientStNext :: ClientStNext blk (Point blk) (Tip blk) m ()
-    clientStNext = ClientStNext
-      { recvMsgRollForward = \blk _tip -> ChainSyncClient $ do
-          -- add block & check if there is consensus on immutable chain
-          -- trace the decision or error
-          res <- atomically $ do
-            addBlock sockPath chainsVar blk
-            checkConsensus chainsVar securityParam
-          traceWith tracer res
-          pure clientStIdle
-      , recvMsgRollBackward = \point _tip -> ChainSyncClient $ do
-          -- rollback & check
-          res <- atomically $ do
-            rollback sockPath chainsVar point
-            checkConsensus chainsVar securityParam
-          traceWith tracer res
-          pure clientStIdle
-      }
-
 -- | Check that all nodes agree with each other, within the security parameter.
 checkConsensus
-  :: forall blk m.
-      ( MonadSTM m
-      , MonadThrow (STM m)
-      , HasHeader blk
-      , HasHeader (Header blk)
-      )
-  => ChainsVar m blk
-  -> SecurityParam
-  -> STM m (ConsensusSuccess blk)
-checkConsensus chainsVar securityParam = do
-  chainsSnapshot <- readTVar chainsVar
-  either throwIO return $ consensusCondition securityParam chainsSnapshot
-
-checkConsensus''
-  :: ConsensusMode mode
-  -> ChainVar mode
-  -> SecurityParam
-  -> STM IO ConsensusSuccess'
-checkConsensus'' cMode chainsVar securityParam = do
-  chainsSnapshot <- readTVar chainsVar
-  either (error "throwIO") return $ error "consensusCondition' securityParam cMode  chainsSnapshot"
-
-checkConsensus'
   :: HasHeader (Header (ConsensusBlockForMode mode))
+  => ConvertRawHash (ConsensusBlockForMode mode)
   => ConsensusMode mode
   -> ChainVar mode
   -> SecurityParam
-  -> STM IO ConsensusSuccess'
-checkConsensus' cMode chainsVar securityParam = do
+  -> STM IO ConsensusSuccess
+checkConsensus cMode chainsVar secParam = do
   chainsSnapshot <- readTVar chainsVar
-  either throwIO return $ consensusCondition' securityParam cMode  chainsSnapshot
+  either throwIO return $ consensusCondition cMode  chainsSnapshot secParam
 
 
-
-
--- | Client Application
-localInitiatorNetworkApplication
-  :: forall blk m.
-     ( RunNode blk
-     , MonadAsync m
-     , MonadST    m
-     , MonadTimer m
-     , MonadThrow (STM m)
-     )
-  => Tracer m (ChairmanTrace blk)
-  -> Tracer m (TraceSendRecv (ChainSync blk (Point blk) (Tip blk)))
-  -- ^ tracer which logs all chain-sync messages send and received by the client
-  -- (see 'Ouroboros.Network.Protocol.ChainSync.Type' in 'ouroboros-network'
-  -- package)
-  -> Tracer m (TraceSendRecv (LocalTxSubmission (GenTx blk) (ApplyTxErr blk)))
-  -- ^ tracer which logs all local tx submission protocol messages send and
-  -- received by the client (see 'Ouroboros.Network.Protocol.LocalTxSubmission.Type'
-  -- in 'ouroboros-network' package).
-  -> CodecConfig blk
-  -> NetworkMagic
-  -> SocketPath
-  -> ChainsVar m blk
-  -> SecurityParam
-  -> Versions
-        NodeToClientVersion
-        NodeToClientVersionData
-        (OuroborosApplication InitiatorMode LocalAddress ByteString m () Void)
-localInitiatorNetworkApplication
-    chairmanTracer chainSyncTracer
-    localTxSubmissionTracer
-    cfg networkMagic
-    sockPath chainsVar securityParam =
-  foldMapVersions
-    (\(version, blockVersion) ->
-      versionedNodeToClientProtocols
-        version
-        versionData
-        (\_ _ -> protocols blockVersion version))
-    (Map.toList (supportedNodeToClientVersions proxy))
-  where
-    proxy :: Proxy blk
-    proxy = Proxy
-
-    versionData = NodeToClientVersionData networkMagic
-
-    protocols
-      :: BlockNodeToClientVersion blk
-      -> NodeToClientVersion
-      -> NodeToClientProtocols InitiatorMode ByteString m () Void
-    protocols byronClientVersion version =
-      NodeToClientProtocols
-      { localChainSyncProtocol =
-          InitiatorProtocolOnly $
-            MuxPeer
-              chainSyncTracer
-              cChainSyncCodec
-              (chainSyncClientPeer $
-                  chainSyncClient chairmanTracer sockPath chainsVar securityParam)
-
-      , localTxSubmissionProtocol =
-          InitiatorProtocolOnly $
-            MuxPeer
-              localTxSubmissionTracer
-              cTxSubmissionCodec
-              localTxSubmissionPeerNull
-      , localStateQueryProtocol =
-          InitiatorProtocolOnly $
-            MuxPeer
-              nullTracer
-              cStateQueryCodec
-              localStateQueryPeerNull
-      }
-      where
-        Codecs
-            { cChainSyncCodec
-            , cTxSubmissionCodec
-            , cStateQueryCodec
-            } =
-          clientCodecs cfg byronClientVersion version

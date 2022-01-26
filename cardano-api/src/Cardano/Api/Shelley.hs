@@ -200,6 +200,7 @@ module Cardano.Api.Shelley
 
 import           Cardano.Api
 import           Cardano.Api.Address
+import           Cardano.Api.Block
 import           Cardano.Api.Certificate
 import           Cardano.Api.Eras
 import           Cardano.Api.IPC
