@@ -30,6 +30,7 @@ jobs:
         ghcup install cabal ${{ matrix.cabal }}
         ghcup set     cabal ${{ matrix.cabal }}
         echo "CABAL_DIR=$HOME/.cabal" >> $GITHUB_ENV
+        echo "TEMP=$HOME/.tmp" >> $GITHUB_ENV
 
     - name: Set cache version
       run: echo "CACHE_VERSION=grFfw8r" >> $GITHUB_ENV
