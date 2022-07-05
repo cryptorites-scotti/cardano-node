@@ -1,0 +1,384 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE OverloadedStrings #-}</span><span>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE TemplateHaskell #-}</span><span>
+</span><span id="line-3"></span><span>
+</span><span id="line-4"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Test.Cli.JSON</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-5"></span><span>
+</span><span id="line-6"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Cardano.Prelude</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-identifier">filter</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-7"></span><span>
+</span><span id="line-8"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-api-1.35.0/noopt/doc/html/cardano-api/src"><span class="hs-identifier">Cardano.Api.Shelley</span></a></span><span>
+</span><span id="line-9"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-api-1.35.0/l/gen/noopt/doc/html/cardano-api/src"><span class="hs-identifier">Gen.Cardano.Api.Typed</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-api-1.35.0/l/gen/noopt/doc/html/cardano-api/src"><span class="hs-identifier">genLovelace</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-api-1.35.0/l/gen/noopt/doc/html/cardano-api/src"><span class="hs-identifier">genSlotNo</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-api-1.35.0/l/gen/noopt/doc/html/cardano-api/src"><span class="hs-identifier">genStakeAddress</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-10"></span><span>                   </span><span class="annot"><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-api-1.35.0/l/gen/noopt/doc/html/cardano-api/src"><span class="hs-identifier">genVerificationKeyHash</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-11"></span><span>
+</span><span id="line-12"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Aeson</span></span><span>
+</span><span id="line-13"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/containers-0.6.5.1/src"><span class="hs-identifier">Data.Map.Strict</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Map</span></span><span>
+</span><span id="line-14"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/time-1.9.3/src"><span class="hs-identifier">Data.Time</span></a></span><span>
+</span><span id="line-15"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/time-1.9.3/src"><span class="hs-identifier">Data.Time.Clock.System</span></a></span><span>
+</span><span id="line-16"></span><span>
+</span><span id="line-17"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-cli-1.35.0/noopt/doc/html/cardano-cli/src"><span class="hs-identifier">Cardano.CLI.Shelley.Output</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-cli-1.35.0/noopt/doc/html/cardano-cli/src"><span class="hs-identifier">QueryKesPeriodInfoOutput</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-18"></span><span>                   </span><span class="annot"><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-cli-1.35.0/noopt/doc/html/cardano-cli/src"><span class="hs-identifier">createOpCertIntervalInfo</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-19"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-cli-1.35.0/noopt/doc/html/cardano-cli/src"><span class="hs-identifier">Cardano.CLI.Shelley.Run.Query</span></a></span><span>
+</span><span id="line-20"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-cli-1.35.0/noopt/doc/html/cardano-cli/src"><span class="hs-identifier">Cardano.CLI.Types</span></a></span><span>
+</span><span id="line-21"></span><span>
+</span><span id="line-22"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Hedgehog</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Gen</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">Property</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">checkSequential</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">discover</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">forAll</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">property</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">tripping</span></span><span class="hs-special">)</span><span>
+</span><span id="line-23"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Hedgehog.Gen</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Gen</span></span><span>
+</span><span id="line-24"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Hedgehog.Range</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Range</span></span><span>
+</span><span id="line-25"></span><span>
+</span><span id="line-26"></span><span class="hs-comment">-- TODO: Move to cardano-api</span><span>
+</span><span id="line-27"></span><span class="annot"><a href="Test.Cli.JSON.html#prop_json_roundtrip_delegations_and_rewards"><span class="hs-identifier hs-type">prop_json_roundtrip_delegations_and_rewards</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Property</span></span><span>
+</span><span id="line-28"></span><span id="prop_json_roundtrip_delegations_and_rewards"><span class="annot"><span class="annottext">prop_json_roundtrip_delegations_and_rewards :: Property
+</span><a href="Test.Cli.JSON.html#prop_json_roundtrip_delegations_and_rewards"><span class="hs-identifier hs-var hs-var">prop_json_roundtrip_delegations_and_rewards</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-29"></span><span>  </span><span class="annot"><span class="annottext">HasCallStack =&gt; PropertyT IO () -&gt; Property
+PropertyT IO () -&gt; Property
+</span><span class="hs-identifier hs-var">property</span></span><span> </span><span class="annot"><span class="annottext">(PropertyT IO () -&gt; Property) -&gt; PropertyT IO () -&gt; Property
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">$</span></a></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-30"></span><span>    </span><span id="local-6989586621679279486"><span class="annot"><span class="annottext">DelegationsAndRewards
+</span><a href="#local-6989586621679279486"><span class="hs-identifier hs-var">dAndG</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Gen DelegationsAndRewards -&gt; PropertyT IO DelegationsAndRewards
+forall (m :: * -&gt; *) a.
+(Monad m, Show a, HasCallStack) =&gt;
+Gen a -&gt; PropertyT m a
+</span><span class="hs-identifier hs-var">forAll</span></span><span> </span><span class="annot"><span class="annottext">Gen DelegationsAndRewards
+</span><a href="Test.Cli.JSON.html#genDelegationsAndRewards"><span class="hs-identifier hs-var">genDelegationsAndRewards</span></a></span><span>
+</span><span id="line-31"></span><span>    </span><span class="annot"><span class="annottext">DelegationsAndRewards
+-&gt; (DelegationsAndRewards -&gt; ByteString)
+-&gt; (ByteString -&gt; Either String DelegationsAndRewards)
+-&gt; PropertyT IO ()
+forall (m :: * -&gt; *) (f :: * -&gt; *) b a.
+(MonadTest m, Applicative f, Show b, Show (f a), Eq (f a),
+ HasCallStack) =&gt;
+a -&gt; (a -&gt; b) -&gt; (b -&gt; f a) -&gt; m ()
+</span><span class="hs-identifier hs-var">tripping</span></span><span> </span><span class="annot"><span class="annottext">DelegationsAndRewards
+</span><a href="#local-6989586621679279486"><span class="hs-identifier hs-var">dAndG</span></a></span><span> </span><span class="annot"><span class="annottext">DelegationsAndRewards -&gt; ByteString
+forall a. ToJSON a =&gt; a -&gt; ByteString
+</span><span class="hs-identifier hs-var">encode</span></span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; Either String DelegationsAndRewards
+forall a. FromJSON a =&gt; ByteString -&gt; Either String a
+</span><span class="hs-identifier hs-var">eitherDecode</span></span><span>
+</span><span id="line-32"></span><span>
+</span><span id="line-33"></span><span class="annot"><a href="Test.Cli.JSON.html#genDelegationsAndRewards"><span class="hs-identifier hs-type">genDelegationsAndRewards</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Gen</span></span><span> </span><span class="annot"><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-cli-1.35.0/noopt/doc/html/cardano-cli/src"><span class="hs-identifier hs-type">DelegationsAndRewards</span></a></span><span>
+</span><span id="line-34"></span><span id="genDelegationsAndRewards"><span class="annot"><span class="annottext">genDelegationsAndRewards :: Gen DelegationsAndRewards
+</span><a href="Test.Cli.JSON.html#genDelegationsAndRewards"><span class="hs-identifier hs-var hs-var">genDelegationsAndRewards</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-35"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679279482"><span class="annot"><span class="annottext">r :: Range Int
+</span><a href="#local-6989586621679279482"><span class="hs-identifier hs-var hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Range Int
+forall a. a -&gt; a -&gt; Range a
+</span><span class="hs-identifier hs-var">Range.constant</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">3</span></span><span>
+</span><span id="line-36"></span><span>  </span><span id="local-6989586621679279480"><span class="annot"><span class="annottext">[StakeAddress]
+</span><a href="#local-6989586621679279480"><span class="hs-identifier hs-var">sAddrs</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Range Int
+-&gt; GenT Identity StakeAddress -&gt; GenT Identity [StakeAddress]
+forall (m :: * -&gt; *) a. MonadGen m =&gt; Range Int -&gt; m a -&gt; m [a]
+</span><span class="hs-identifier hs-var">Gen.list</span></span><span> </span><span class="annot"><span class="annottext">Range Int
+</span><a href="#local-6989586621679279482"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="annot"><span class="annottext">GenT Identity StakeAddress
+</span><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-api-1.35.0/l/gen/noopt/doc/html/cardano-api/src"><span class="hs-identifier hs-var">genStakeAddress</span></a></span><span>
+</span><span id="line-37"></span><span>  </span><span id="local-6989586621679279478"><span class="annot"><span class="annottext">[Lovelace]
+</span><a href="#local-6989586621679279478"><span class="hs-identifier hs-var">sLovelace</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Range Int -&gt; GenT Identity Lovelace -&gt; GenT Identity [Lovelace]
+forall (m :: * -&gt; *) a. MonadGen m =&gt; Range Int -&gt; m a -&gt; m [a]
+</span><span class="hs-identifier hs-var">Gen.list</span></span><span> </span><span class="annot"><span class="annottext">Range Int
+</span><a href="#local-6989586621679279482"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="annot"><span class="annottext">GenT Identity Lovelace
+</span><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-api-1.35.0/l/gen/noopt/doc/html/cardano-api/src"><span class="hs-identifier hs-var">genLovelace</span></a></span><span>
+</span><span id="line-38"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679279477"><span class="annot"><span class="annottext">delegMapAmt :: Map StakeAddress Lovelace
+</span><a href="#local-6989586621679279477"><span class="hs-identifier hs-var hs-var">delegMapAmt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[(StakeAddress, Lovelace)] -&gt; Map StakeAddress Lovelace
+forall k a. Ord k =&gt; [(k, a)] -&gt; Map k a
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/containers-0.6.5.1/src"><span class="hs-identifier hs-var">Map.fromList</span></a></span><span> </span><span class="annot"><span class="annottext">([(StakeAddress, Lovelace)] -&gt; Map StakeAddress Lovelace)
+-&gt; [(StakeAddress, Lovelace)] -&gt; Map StakeAddress Lovelace
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">$</span></a></span><span> </span><span class="annot"><span class="annottext">[StakeAddress] -&gt; [Lovelace] -&gt; [(StakeAddress, Lovelace)]
+forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-identifier hs-var">zip</span></a></span><span> </span><span class="annot"><span class="annottext">[StakeAddress]
+</span><a href="#local-6989586621679279480"><span class="hs-identifier hs-var">sAddrs</span></a></span><span> </span><span class="annot"><span class="annottext">[Lovelace]
+</span><a href="#local-6989586621679279478"><span class="hs-identifier hs-var">sLovelace</span></a></span><span>
+</span><span id="line-39"></span><span>  </span><span id="local-6989586621679279475"><span class="annot"><span class="annottext">[Hash StakePoolKey]
+</span><a href="#local-6989586621679279475"><span class="hs-identifier hs-var">poolIDs</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Range Int
+-&gt; GenT Identity (Hash StakePoolKey)
+-&gt; GenT Identity [Hash StakePoolKey]
+forall (m :: * -&gt; *) a. MonadGen m =&gt; Range Int -&gt; m a -&gt; m [a]
+</span><span class="hs-identifier hs-var">Gen.list</span></span><span> </span><span class="annot"><span class="annottext">Range Int
+</span><a href="#local-6989586621679279482"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="annot"><span class="annottext">GenT Identity (Hash StakePoolKey)
+</span><a href="Test.Cli.JSON.html#genPoolId"><span class="hs-identifier hs-var">genPoolId</span></a></span><span>
+</span><span id="line-40"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679279473"><span class="annot"><span class="annottext">delegMapPool :: Map StakeAddress (Hash StakePoolKey)
+</span><a href="#local-6989586621679279473"><span class="hs-identifier hs-var hs-var">delegMapPool</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[(StakeAddress, Hash StakePoolKey)]
+-&gt; Map StakeAddress (Hash StakePoolKey)
+forall k a. Ord k =&gt; [(k, a)] -&gt; Map k a
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/containers-0.6.5.1/src"><span class="hs-identifier hs-var">Map.fromList</span></a></span><span> </span><span class="annot"><span class="annottext">([(StakeAddress, Hash StakePoolKey)]
+ -&gt; Map StakeAddress (Hash StakePoolKey))
+-&gt; [(StakeAddress, Hash StakePoolKey)]
+-&gt; Map StakeAddress (Hash StakePoolKey)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">$</span></a></span><span> </span><span class="annot"><span class="annottext">[StakeAddress]
+-&gt; [Hash StakePoolKey] -&gt; [(StakeAddress, Hash StakePoolKey)]
+forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-identifier hs-var">zip</span></a></span><span> </span><span class="annot"><span class="annottext">[StakeAddress]
+</span><a href="#local-6989586621679279480"><span class="hs-identifier hs-var">sAddrs</span></a></span><span> </span><span class="annot"><span class="annottext">[Hash StakePoolKey]
+</span><a href="#local-6989586621679279475"><span class="hs-identifier hs-var">poolIDs</span></a></span><span>
+</span><span id="line-41"></span><span>  </span><span class="annot"><span class="annottext">DelegationsAndRewards -&gt; Gen DelegationsAndRewards
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-identifier hs-var">return</span></a></span><span> </span><span class="annot"><span class="annottext">(DelegationsAndRewards -&gt; Gen DelegationsAndRewards)
+-&gt; DelegationsAndRewards -&gt; Gen DelegationsAndRewards
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">$</span></a></span><span> </span><span class="annot"><span class="annottext">(Map StakeAddress Lovelace, Map StakeAddress (Hash StakePoolKey))
+-&gt; DelegationsAndRewards
+</span><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-cli-1.35.0/noopt/doc/html/cardano-cli/src"><span class="hs-identifier hs-var">DelegationsAndRewards</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Map StakeAddress Lovelace
+</span><a href="#local-6989586621679279477"><span class="hs-identifier hs-var">delegMapAmt</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">Map StakeAddress (Hash StakePoolKey)
+</span><a href="#local-6989586621679279473"><span class="hs-identifier hs-var">delegMapPool</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-42"></span><span>
+</span><span id="line-43"></span><span class="annot"><a href="Test.Cli.JSON.html#genOpCertIntervalInformation"><span class="hs-identifier hs-type">genOpCertIntervalInformation</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Gen</span></span><span> </span><span class="annot"><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-cli-1.35.0/noopt/doc/html/cardano-cli/src"><span class="hs-identifier hs-type">OpCertIntervalInformation</span></a></span><span>
+</span><span id="line-44"></span><span id="genOpCertIntervalInformation"><span class="annot"><span class="annottext">genOpCertIntervalInformation :: Gen OpCertIntervalInformation
+</span><a href="Test.Cli.JSON.html#genOpCertIntervalInformation"><span class="hs-identifier hs-var hs-var">genOpCertIntervalInformation</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-45"></span><span>  </span><span class="annot"><span class="annottext">CurrentKesPeriod
+-&gt; OpCertStartingKesPeriod
+-&gt; OpCertEndingKesPeriod
+-&gt; Maybe SlotsTillKesKeyExpiry
+-&gt; OpCertIntervalInformation
+</span><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-cli-1.35.0/noopt/doc/html/cardano-cli/src"><span class="hs-identifier hs-var">createOpCertIntervalInfo</span></a></span><span>
+</span><span id="line-46"></span><span>    </span><span class="annot"><span class="annottext">(CurrentKesPeriod
+ -&gt; OpCertStartingKesPeriod
+ -&gt; OpCertEndingKesPeriod
+ -&gt; Maybe SlotsTillKesKeyExpiry
+ -&gt; OpCertIntervalInformation)
+-&gt; GenT Identity CurrentKesPeriod
+-&gt; GenT
+     Identity
+     (OpCertStartingKesPeriod
+      -&gt; OpCertEndingKesPeriod
+      -&gt; Maybe SlotsTillKesKeyExpiry
+      -&gt; OpCertIntervalInformation)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">&lt;$&gt;</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Word64 -&gt; CurrentKesPeriod
+</span><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-cli-1.35.0/noopt/doc/html/cardano-cli/src"><span class="hs-identifier hs-var">CurrentKesPeriod</span></a></span><span> </span><span class="annot"><span class="annottext">(Word64 -&gt; CurrentKesPeriod)
+-&gt; GenT Identity Word64 -&gt; GenT Identity CurrentKesPeriod
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">&lt;$&gt;</span></a></span><span> </span><span class="annot"><span class="annottext">GenT Identity Word64
+</span><a href="Test.Cli.JSON.html#genWord64"><span class="hs-identifier hs-var">genWord64</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-47"></span><span>    </span><span class="annot"><span class="annottext">GenT
+  Identity
+  (OpCertStartingKesPeriod
+   -&gt; OpCertEndingKesPeriod
+   -&gt; Maybe SlotsTillKesKeyExpiry
+   -&gt; OpCertIntervalInformation)
+-&gt; GenT Identity OpCertStartingKesPeriod
+-&gt; GenT
+     Identity
+     (OpCertEndingKesPeriod
+      -&gt; Maybe SlotsTillKesKeyExpiry -&gt; OpCertIntervalInformation)
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">&lt;*&gt;</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Word64 -&gt; OpCertStartingKesPeriod
+</span><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-cli-1.35.0/noopt/doc/html/cardano-cli/src"><span class="hs-identifier hs-var">OpCertStartingKesPeriod</span></a></span><span> </span><span class="annot"><span class="annottext">(Word64 -&gt; OpCertStartingKesPeriod)
+-&gt; GenT Identity Word64 -&gt; GenT Identity OpCertStartingKesPeriod
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">&lt;$&gt;</span></a></span><span> </span><span class="annot"><span class="annottext">GenT Identity Word64
+</span><a href="Test.Cli.JSON.html#genWord64"><span class="hs-identifier hs-var">genWord64</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-48"></span><span>    </span><span class="annot"><span class="annottext">GenT
+  Identity
+  (OpCertEndingKesPeriod
+   -&gt; Maybe SlotsTillKesKeyExpiry -&gt; OpCertIntervalInformation)
+-&gt; GenT Identity OpCertEndingKesPeriod
+-&gt; GenT
+     Identity (Maybe SlotsTillKesKeyExpiry -&gt; OpCertIntervalInformation)
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">&lt;*&gt;</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Word64 -&gt; OpCertEndingKesPeriod
+</span><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-cli-1.35.0/noopt/doc/html/cardano-cli/src"><span class="hs-identifier hs-var">OpCertEndingKesPeriod</span></a></span><span> </span><span class="annot"><span class="annottext">(Word64 -&gt; OpCertEndingKesPeriod)
+-&gt; GenT Identity Word64 -&gt; GenT Identity OpCertEndingKesPeriod
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">&lt;$&gt;</span></a></span><span> </span><span class="annot"><span class="annottext">GenT Identity Word64
+</span><a href="Test.Cli.JSON.html#genWord64"><span class="hs-identifier hs-var">genWord64</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-49"></span><span>    </span><span class="annot"><span class="annottext">GenT
+  Identity (Maybe SlotsTillKesKeyExpiry -&gt; OpCertIntervalInformation)
+-&gt; GenT Identity (Maybe SlotsTillKesKeyExpiry)
+-&gt; Gen OpCertIntervalInformation
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">&lt;*&gt;</span></a></span><span> </span><span class="annot"><span class="annottext">GenT Identity SlotsTillKesKeyExpiry
+-&gt; GenT Identity (Maybe SlotsTillKesKeyExpiry)
+forall (m :: * -&gt; *) a. MonadGen m =&gt; m a -&gt; m (Maybe a)
+</span><span class="hs-identifier hs-var">Gen.maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">SlotNo -&gt; SlotsTillKesKeyExpiry
+</span><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-cli-1.35.0/noopt/doc/html/cardano-cli/src"><span class="hs-identifier hs-var">SlotsTillKesKeyExpiry</span></a></span><span> </span><span class="annot"><span class="annottext">(SlotNo -&gt; SlotsTillKesKeyExpiry)
+-&gt; GenT Identity SlotNo -&gt; GenT Identity SlotsTillKesKeyExpiry
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">&lt;$&gt;</span></a></span><span> </span><span class="annot"><span class="annottext">GenT Identity SlotNo
+</span><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-api-1.35.0/l/gen/noopt/doc/html/cardano-api/src"><span class="hs-identifier hs-var">genSlotNo</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-50"></span><span>
+</span><span id="line-51"></span><span class="annot"><a href="Test.Cli.JSON.html#genPoolId"><span class="hs-identifier hs-type">genPoolId</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Gen</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-api-1.35.0/noopt/doc/html/cardano-api/src"><span class="hs-identifier hs-type">Hash</span></a></span><span> </span><span class="annot"><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-api-1.35.0/noopt/doc/html/cardano-api/src"><span class="hs-identifier hs-type">StakePoolKey</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-52"></span><span id="genPoolId"><span class="annot"><span class="annottext">genPoolId :: GenT Identity (Hash StakePoolKey)
+</span><a href="Test.Cli.JSON.html#genPoolId"><span class="hs-identifier hs-var hs-var">genPoolId</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">AsType StakePoolKey -&gt; GenT Identity (Hash StakePoolKey)
+forall keyrole. Key keyrole =&gt; AsType keyrole -&gt; Gen (Hash keyrole)
+</span><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-api-1.35.0/l/gen/noopt/doc/html/cardano-api/src"><span class="hs-identifier hs-var">genVerificationKeyHash</span></a></span><span> </span><span class="annot"><span class="annottext">AsType StakePoolKey
+</span><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-api-1.35.0/noopt/doc/html/cardano-api/src"><span class="hs-identifier hs-var">AsStakePoolKey</span></a></span><span>
+</span><span id="line-53"></span><span>
+</span><span id="line-54"></span><span class="annot"><a href="Test.Cli.JSON.html#genWord64"><span class="hs-identifier hs-type">genWord64</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Gen</span></span><span> </span><span class="annot"><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-identifier hs-type">Word64</span></a></span><span>
+</span><span id="line-55"></span><span id="genWord64"><span class="annot"><span class="annottext">genWord64 :: GenT Identity Word64
+</span><a href="Test.Cli.JSON.html#genWord64"><span class="hs-identifier hs-var hs-var">genWord64</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Range Word64 -&gt; GenT Identity Word64
+forall (m :: * -&gt; *). MonadGen m =&gt; Range Word64 -&gt; m Word64
+</span><span class="hs-identifier hs-var">Gen.word64</span></span><span> </span><span class="annot"><span class="annottext">Range Word64
+forall a. (Bounded a, Num a) =&gt; Range a
+</span><span class="hs-identifier hs-var">Range.constantBounded</span></span><span>
+</span><span id="line-56"></span><span>
+</span><span id="line-57"></span><span class="annot"><a href="Test.Cli.JSON.html#genUTCTime"><span class="hs-identifier hs-type">genUTCTime</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Gen</span></span><span> </span><span class="annot"><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/time-1.9.3/src"><span class="hs-identifier hs-type">UTCTime</span></a></span><span>
+</span><span id="line-58"></span><span id="genUTCTime"><span class="annot"><span class="annottext">genUTCTime :: Gen UTCTime
+</span><a href="Test.Cli.JSON.html#genUTCTime"><span class="hs-identifier hs-var hs-var">genUTCTime</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-59"></span><span> </span><span class="annot"><span class="annottext">SystemTime -&gt; UTCTime
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/time-1.9.3/src"><span class="hs-identifier hs-var">systemToUTCTime</span></a></span><span> </span><span class="annot"><span class="annottext">(SystemTime -&gt; UTCTime) -&gt; GenT Identity SystemTime -&gt; Gen UTCTime
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">&lt;$&gt;</span></a></span><span>
+</span><span id="line-60"></span><span>   </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int64 -&gt; Word32 -&gt; SystemTime
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/time-1.9.3/src"><span class="hs-identifier hs-var">MkSystemTime</span></a></span><span> </span><span class="annot"><span class="annottext">(Int64 -&gt; Word32 -&gt; SystemTime)
+-&gt; GenT Identity Int64 -&gt; GenT Identity (Word32 -&gt; SystemTime)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">&lt;$&gt;</span></a></span><span> </span><span class="annot"><span class="annottext">Range Int64 -&gt; GenT Identity Int64
+forall (m :: * -&gt; *). MonadGen m =&gt; Range Int64 -&gt; m Int64
+</span><span class="hs-identifier hs-var">Gen.int64</span></span><span> </span><span class="annot"><span class="annottext">Range Int64
+forall a. (Bounded a, Num a) =&gt; Range a
+</span><span class="hs-identifier hs-var">Range.constantBounded</span></span><span>
+</span><span id="line-61"></span><span>                 </span><span class="annot"><span class="annottext">GenT Identity (Word32 -&gt; SystemTime)
+-&gt; GenT Identity Word32 -&gt; GenT Identity SystemTime
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">&lt;*&gt;</span></a></span><span> </span><span class="annot"><span class="annottext">Range Word32 -&gt; GenT Identity Word32
+forall (m :: * -&gt; *). MonadGen m =&gt; Range Word32 -&gt; m Word32
+</span><span class="hs-identifier hs-var">Gen.word32</span></span><span> </span><span class="annot"><span class="annottext">Range Word32
+forall a. (Bounded a, Num a) =&gt; Range a
+</span><span class="hs-identifier hs-var">Range.constantBounded</span></span><span class="hs-special">)</span><span>
+</span><span id="line-62"></span><span>
+</span><span id="line-63"></span><span class="annot"><a href="Test.Cli.JSON.html#genKesPeriodInfoOutput"><span class="hs-identifier hs-type">genKesPeriodInfoOutput</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Gen</span></span><span> </span><span class="annot"><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-cli-1.35.0/noopt/doc/html/cardano-cli/src"><span class="hs-identifier hs-type">QueryKesPeriodInfoOutput</span></a></span><span>
+</span><span id="line-64"></span><span id="genKesPeriodInfoOutput"><span class="annot"><span class="annottext">genKesPeriodInfoOutput :: Gen QueryKesPeriodInfoOutput
+</span><a href="Test.Cli.JSON.html#genKesPeriodInfoOutput"><span class="hs-identifier hs-var hs-var">genKesPeriodInfoOutput</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-65"></span><span>  </span><span class="annot"><span class="annottext">OpCertIntervalInformation
+-&gt; Maybe UTCTime
+-&gt; Maybe OpCertNodeStateCounter
+-&gt; OpCertOnDiskCounter
+-&gt; Word64
+-&gt; Word64
+-&gt; QueryKesPeriodInfoOutput
+</span><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-cli-1.35.0/noopt/doc/html/cardano-cli/src"><span class="hs-identifier hs-var">QueryKesPeriodInfoOutput</span></a></span><span>
+</span><span id="line-66"></span><span>    </span><span class="annot"><span class="annottext">(OpCertIntervalInformation
+ -&gt; Maybe UTCTime
+ -&gt; Maybe OpCertNodeStateCounter
+ -&gt; OpCertOnDiskCounter
+ -&gt; Word64
+ -&gt; Word64
+ -&gt; QueryKesPeriodInfoOutput)
+-&gt; Gen OpCertIntervalInformation
+-&gt; GenT
+     Identity
+     (Maybe UTCTime
+      -&gt; Maybe OpCertNodeStateCounter
+      -&gt; OpCertOnDiskCounter
+      -&gt; Word64
+      -&gt; Word64
+      -&gt; QueryKesPeriodInfoOutput)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">&lt;$&gt;</span></a></span><span> </span><span class="annot"><span class="annottext">Gen OpCertIntervalInformation
+</span><a href="Test.Cli.JSON.html#genOpCertIntervalInformation"><span class="hs-identifier hs-var">genOpCertIntervalInformation</span></a></span><span>
+</span><span id="line-67"></span><span>    </span><span class="annot"><span class="annottext">GenT
+  Identity
+  (Maybe UTCTime
+   -&gt; Maybe OpCertNodeStateCounter
+   -&gt; OpCertOnDiskCounter
+   -&gt; Word64
+   -&gt; Word64
+   -&gt; QueryKesPeriodInfoOutput)
+-&gt; GenT Identity (Maybe UTCTime)
+-&gt; GenT
+     Identity
+     (Maybe OpCertNodeStateCounter
+      -&gt; OpCertOnDiskCounter
+      -&gt; Word64
+      -&gt; Word64
+      -&gt; QueryKesPeriodInfoOutput)
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">&lt;*&gt;</span></a></span><span> </span><span class="annot"><span class="annottext">Gen UTCTime -&gt; GenT Identity (Maybe UTCTime)
+forall (m :: * -&gt; *) a. MonadGen m =&gt; m a -&gt; m (Maybe a)
+</span><span class="hs-identifier hs-var">Gen.maybe</span></span><span> </span><span class="annot"><span class="annottext">Gen UTCTime
+</span><a href="Test.Cli.JSON.html#genUTCTime"><span class="hs-identifier hs-var">genUTCTime</span></a></span><span>
+</span><span id="line-68"></span><span>    </span><span class="annot"><span class="annottext">GenT
+  Identity
+  (Maybe OpCertNodeStateCounter
+   -&gt; OpCertOnDiskCounter
+   -&gt; Word64
+   -&gt; Word64
+   -&gt; QueryKesPeriodInfoOutput)
+-&gt; GenT Identity (Maybe OpCertNodeStateCounter)
+-&gt; GenT
+     Identity
+     (OpCertOnDiskCounter
+      -&gt; Word64 -&gt; Word64 -&gt; QueryKesPeriodInfoOutput)
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">&lt;*&gt;</span></a></span><span> </span><span class="annot"><span class="annottext">GenT Identity OpCertNodeStateCounter
+-&gt; GenT Identity (Maybe OpCertNodeStateCounter)
+forall (m :: * -&gt; *) a. MonadGen m =&gt; m a -&gt; m (Maybe a)
+</span><span class="hs-identifier hs-var">Gen.maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Word64 -&gt; OpCertNodeStateCounter
+</span><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-cli-1.35.0/noopt/doc/html/cardano-cli/src"><span class="hs-identifier hs-var">OpCertNodeStateCounter</span></a></span><span> </span><span class="annot"><span class="annottext">(Word64 -&gt; OpCertNodeStateCounter)
+-&gt; GenT Identity Word64 -&gt; GenT Identity OpCertNodeStateCounter
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">&lt;$&gt;</span></a></span><span> </span><span class="annot"><span class="annottext">GenT Identity Word64
+</span><a href="Test.Cli.JSON.html#genWord64"><span class="hs-identifier hs-var">genWord64</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-69"></span><span>    </span><span class="annot"><span class="annottext">GenT
+  Identity
+  (OpCertOnDiskCounter
+   -&gt; Word64 -&gt; Word64 -&gt; QueryKesPeriodInfoOutput)
+-&gt; GenT Identity OpCertOnDiskCounter
+-&gt; GenT Identity (Word64 -&gt; Word64 -&gt; QueryKesPeriodInfoOutput)
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">&lt;*&gt;</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Word64 -&gt; OpCertOnDiskCounter
+</span><a href="../file:///home/runner/work/cardano-node/cardano-node/dist-newstyle/build/x86_64-linux/ghc-8.10.7/cardano-cli-1.35.0/noopt/doc/html/cardano-cli/src"><span class="hs-identifier hs-var">OpCertOnDiskCounter</span></a></span><span> </span><span class="annot"><span class="annottext">(Word64 -&gt; OpCertOnDiskCounter)
+-&gt; GenT Identity Word64 -&gt; GenT Identity OpCertOnDiskCounter
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">&lt;$&gt;</span></a></span><span> </span><span class="annot"><span class="annottext">GenT Identity Word64
+</span><a href="Test.Cli.JSON.html#genWord64"><span class="hs-identifier hs-var">genWord64</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-70"></span><span>    </span><span class="annot"><span class="annottext">GenT Identity (Word64 -&gt; Word64 -&gt; QueryKesPeriodInfoOutput)
+-&gt; GenT Identity Word64
+-&gt; GenT Identity (Word64 -&gt; QueryKesPeriodInfoOutput)
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">&lt;*&gt;</span></a></span><span> </span><span class="annot"><span class="annottext">GenT Identity Word64
+</span><a href="Test.Cli.JSON.html#genWord64"><span class="hs-identifier hs-var">genWord64</span></a></span><span>
+</span><span id="line-71"></span><span>    </span><span class="annot"><span class="annottext">GenT Identity (Word64 -&gt; QueryKesPeriodInfoOutput)
+-&gt; GenT Identity Word64 -&gt; Gen QueryKesPeriodInfoOutput
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">&lt;*&gt;</span></a></span><span> </span><span class="annot"><span class="annottext">GenT Identity Word64
+</span><a href="Test.Cli.JSON.html#genWord64"><span class="hs-identifier hs-var">genWord64</span></a></span><span>
+</span><span id="line-72"></span><span>
+</span><span id="line-73"></span><span>
+</span><span id="line-74"></span><span class="annot"><a href="Test.Cli.JSON.html#prop_roundtrip_kes_period_info_output_JSON"><span class="hs-identifier hs-type">prop_roundtrip_kes_period_info_output_JSON</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Property</span></span><span>
+</span><span id="line-75"></span><span id="prop_roundtrip_kes_period_info_output_JSON"><span class="annot"><span class="annottext">prop_roundtrip_kes_period_info_output_JSON :: Property
+</span><a href="Test.Cli.JSON.html#prop_roundtrip_kes_period_info_output_JSON"><span class="hs-identifier hs-var hs-var">prop_roundtrip_kes_period_info_output_JSON</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">HasCallStack =&gt; PropertyT IO () -&gt; Property
+PropertyT IO () -&gt; Property
+</span><span class="hs-identifier hs-var">property</span></span><span> </span><span class="annot"><span class="annottext">(PropertyT IO () -&gt; Property) -&gt; PropertyT IO () -&gt; Property
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/base-4.14.3.0/src"><span class="hs-operator hs-var">$</span></a></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-76"></span><span>  </span><span id="local-6989586621679279450"><span class="annot"><span class="annottext">QueryKesPeriodInfoOutput
+</span><a href="#local-6989586621679279450"><span class="hs-identifier hs-var">kesPeriodOutput</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Gen QueryKesPeriodInfoOutput
+-&gt; PropertyT IO QueryKesPeriodInfoOutput
+forall (m :: * -&gt; *) a.
+(Monad m, Show a, HasCallStack) =&gt;
+Gen a -&gt; PropertyT m a
+</span><span class="hs-identifier hs-var">forAll</span></span><span> </span><span class="annot"><span class="annottext">Gen QueryKesPeriodInfoOutput
+</span><a href="Test.Cli.JSON.html#genKesPeriodInfoOutput"><span class="hs-identifier hs-var">genKesPeriodInfoOutput</span></a></span><span>
+</span><span id="line-77"></span><span>  </span><span class="annot"><span class="annottext">QueryKesPeriodInfoOutput
+-&gt; (QueryKesPeriodInfoOutput -&gt; ByteString)
+-&gt; (ByteString -&gt; Either String QueryKesPeriodInfoOutput)
+-&gt; PropertyT IO ()
+forall (m :: * -&gt; *) (f :: * -&gt; *) b a.
+(MonadTest m, Applicative f, Show b, Show (f a), Eq (f a),
+ HasCallStack) =&gt;
+a -&gt; (a -&gt; b) -&gt; (b -&gt; f a) -&gt; m ()
+</span><span class="hs-identifier hs-var">tripping</span></span><span> </span><span class="annot"><span class="annottext">QueryKesPeriodInfoOutput
+</span><a href="#local-6989586621679279450"><span class="hs-identifier hs-var">kesPeriodOutput</span></a></span><span> </span><span class="annot"><span class="annottext">QueryKesPeriodInfoOutput -&gt; ByteString
+forall a. ToJSON a =&gt; a -&gt; ByteString
+</span><span class="hs-identifier hs-var">encode</span></span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; Either String QueryKesPeriodInfoOutput
+forall a. FromJSON a =&gt; ByteString -&gt; Either String a
+</span><span class="hs-identifier hs-var">eitherDecode</span></span><span>
+</span><span id="line-78"></span><span>
+</span><span id="line-79"></span><span class="hs-comment">--- -----------------------------------------------------------------------------</span><span>
+</span><span id="line-80"></span><span>
+</span><span id="line-81"></span><span class="annot"><a href="Test.Cli.JSON.html#tests"><span class="hs-identifier hs-type">tests</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/ghc-prim-0.6.1/src"><span class="hs-identifier hs-type">IO</span></a></span><span> </span><span class="annot"><a href="../file:///home/runner/.ghcup/ghc/8.10.7/share/doc/ghc-8.10.7/html/libraries/ghc-prim-0.6.1/src"><span class="hs-identifier hs-type">Bool</span></a></span><span>
+</span><span id="line-82"></span><span id="tests"><span class="annot"><span class="annottext">tests :: IO Bool
+</span><a href="Test.Cli.JSON.html#tests"><span class="hs-identifier hs-var hs-var">tests</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-83"></span><span>  </span><span class="annot"><span class="annottext">Group -&gt; IO Bool
+forall (m :: * -&gt; *). MonadIO m =&gt; Group -&gt; m Bool
+</span><span class="hs-identifier hs-var">checkSequential</span></span><span> </span><span class="annot"><span class="annottext">String
+[(PropertyName, Property)]
+Property
+String -&gt; GroupName
+String -&gt; PropertyName
+GroupName -&gt; [(PropertyName, Property)] -&gt; Group
+prop_roundtrip_kes_period_info_output_JSON :: Property
+prop_json_roundtrip_delegations_and_rewards :: Property
+</span><span class="hs-var hs-var hs-var hs-var hs-var hs-var">$$discover</span></span><span>
+</span><span id="line-84"></span></pre></body></html>
